@@ -1,0 +1,691 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<section class="panel wellbeing-page-card">
+
+    <!-- Header Navigation & Actions -->
+    <div class="wellbeing-top-nav">
+        <div class="wellbeing-breadcrumbs">
+            <a href="{{ url_for('patients_page') }}">Patients Registry</a>
+            <span>/</span>
+            <a href="{{ url_for('patient_record_history_page', patient_id=patient.id) }}">{{ patient.first_name }} {{
+                patient.last_name }}</a>
+            <span>/</span>
+            <span class="current">Current Well Being Assessment</span>
+        </div>
+
+        <div class="wellbeing-action-btns">
+            <button type="button" class="btn-secondary" onclick="window.print()">
+                🖨️ Print Assessment
+            </button>
+            <a class="btn-outline" href="{{ url_for('download_patient_history', patient_id=patient.id) }}">
+                📥 Download History PDF
+            </a>
+            <a class="btn-primary" href="{{ url_for('add_health_record_page', patient_id=patient.id) }}">
+                + Add Another Record
+            </a>
+        </div>
+    </div>
+
+    <!-- Official Feature Introduction Banner (Exact Specified Text) -->
+    <div class="wellbeing-feature-banner">
+        <div class="feature-banner-icon">🌿</div>
+        <div class="feature-banner-content">
+            <span class="feature-tag">System Feature</span>
+            <h2>Current Well Being Assessment Feature</h2>
+            <p class="feature-description">
+                The Current Well Being Assessment feature has been added to support the monitoring of users' general
+                health and wellness. This feature considers collected health information and provides general wellness
+                guidance to help users better understand their screening results. It is designed to support health
+                monitoring without providing medical diagnoses or treatment recommendations.
+            </p>
+        </div>
+    </div>
+
+    <!-- Patient Summary & Overall Wellbeing Status -->
+    <div class="wellbeing-overview-grid">
+        <div class="wellbeing-patient-card">
+            <div class="patient-avatar">
+                {{ patient.first_name[0] }}{{ patient.last_name[0] }}
+            </div>
+            <div class="patient-details">
+                <span class="patient-meta-eyebrow">Patient Profile</span>
+                <h3>{{ patient.first_name }} {{ patient.last_name }}</h3>
+                <div class="patient-meta-chips">
+                    <span class="meta-chip">👤 {{ patient.gender }}</span>
+                    <span class="meta-chip">🎂 {{ patient.age }} yrs old</span>
+                    {% if patient.barangay %}
+                    <span class="meta-chip">📍 Brgy. {{ patient.barangay }}</span>
+                    {% endif %}
+                    <span class="meta-chip">🕒 {{ record.A }} {{ record.B }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="wellbeing-status-card {{ assessment.tier_badge }}">
+            <div class="status-card-header">
+                <span>Overall Screening Status</span>
+                <span class="status-badge {{ assessment.tier_badge }}">{{ assessment.overall_tier }}</span>
+            </div>
+            <p class="status-summary-text">{{ assessment.overall_summary }}</p>
+            <div class="status-footer-note">
+                <strong>Clinical Remarks:</strong> {{ record.remarks }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Individual Screening Vitals & Observations -->
+    <div class="wellbeing-section-header">
+        <div>
+            <h3>Collected Health Screening Metrics</h3>
+            <p>Evaluation of vital signs against clinical baseline reference thresholds</p>
+        </div>
+    </div>
+
+    <div class="wellbeing-vitals-grid">
+        {% for vital in assessment.vitals %}
+        <div class="vital-card {{ vital.badge }}">
+            <div class="vital-card-top">
+                <div class="vital-icon-box">{{ vital.icon }}</div>
+                <span class="vital-badge {{ vital.badge }}">{{ vital.status }}</span>
+            </div>
+
+            <div class="vital-card-body">
+                <h4 class="vital-name">{{ vital.name }}</h4>
+                <div class="vital-value">{{ vital.value }}</div>
+                <div class="vital-ref">Standard Reference: <strong>{{ vital.reference }}</strong></div>
+                <div class="vital-note">{{ vital.note }}</div>
+            </div>
+
+            <div class="vital-card-footer">
+                <span class="guidance-label">Wellness Guidance:</span>
+                <p>{{ vital.tips }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- General Wellness Guidance Pillars -->
+    <div class="wellbeing-section-header" style="margin-top: 32px;">
+        <div>
+            <h3>Personalized General Wellness Guidance</h3>
+            <p>Evidence-based lifestyle practices to support ongoing vitality and prevention</p>
+        </div>
+    </div>
+
+    <div class="guidance-pillars-grid">
+        {% for pillar in assessment.guidance_pillars %}
+        <div class="pillar-card">
+            <div class="pillar-header">
+                <span class="pillar-icon">{{ pillar.icon }}</span>
+                <h4>{{ pillar.title }}</h4>
+            </div>
+            <p class="pillar-content">{{ pillar.content }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Medical Disclaimer Banner -->
+    <div class="wellbeing-disclaimer-box">
+        <div class="disclaimer-icon">ℹ️</div>
+        <div class="disclaimer-text">
+            <strong>Important Clinical Disclaimer:</strong>
+            <p>
+                The guidance provided above is for general wellness, educational, and routine monitoring purposes only.
+                It is not intended to be a substitute for professional medical diagnosis, clinical judgment, or
+                individualized therapy. If you or the patient experience severe symptoms, chest discomfort, shortness of
+                breath, or prolonged high fever, please seek immediate medical attention from a certified healthcare
+                physician or hospital facility.
+            </p>
+        </div>
+    </div>
+
+    <!-- Bottom Actions Toolbar -->
+    <div class="wellbeing-bottom-actions">
+        <a href="{{ url_for('patient_record_history_page', patient_id=patient.id) }}" class="btn-outline">
+            ← View Full Patient Health History
+        </a>
+        <a href="{{ url_for('patients_page') }}" class="btn-primary">
+            Done & Return to Patient Registry
+        </a>
+    </div>
+
+</section>
+
+<style>
+    .wellbeing-page-card {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 32px;
+        box-shadow: 0 10px 30px rgba(15, 107, 255, 0.08);
+        border: 1px solid #dce8f7;
+        margin-bottom: 30px;
+    }
+
+    .wellbeing-top-nav {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 24px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid #edf2f9;
+    }
+
+    .wellbeing-breadcrumbs {
+        font-size: 14px;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .wellbeing-breadcrumbs a {
+        color: #0f6bff;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .wellbeing-breadcrumbs a:hover {
+        text-decoration: underline;
+    }
+
+    .wellbeing-breadcrumbs .current {
+        color: #1e293b;
+        font-weight: 600;
+    }
+
+    .wellbeing-action-btns {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-outline {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+    }
+
+    .btn-primary {
+        background: #0f6bff;
+        color: #ffffff;
+    }
+
+    .btn-primary:hover {
+        background: #0847b8;
+        transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+        background: #f1f5f9;
+        color: #334155;
+    }
+
+    .btn-secondary:hover {
+        background: #e2e8f0;
+    }
+
+    .btn-outline {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        color: #334155;
+    }
+
+    .btn-outline:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
+    }
+
+    /* Feature Introduction Banner */
+    .wellbeing-feature-banner {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+        background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+        border: 1px solid #bbf7d0;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 28px;
+    }
+
+    .feature-banner-icon {
+        font-size: 38px;
+        background: #ffffff;
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+        flex-shrink: 0;
+    }
+
+    .feature-banner-content {
+        flex: 1;
+    }
+
+    .feature-tag {
+        display: inline-block;
+        background: #10b981;
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        margin-bottom: 8px;
+    }
+
+    .feature-banner-content h2 {
+        margin: 0 0 8px 0;
+        font-size: 22px;
+        color: #065f46;
+        font-weight: 700;
+    }
+
+    .feature-description {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.6;
+        color: #1f2937;
+        font-weight: 400;
+    }
+
+    /* Patient & Status Overview */
+    .wellbeing-overview-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    @media (max-width: 900px) {
+        .wellbeing-overview-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .wellbeing-patient-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 22px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+    }
+
+    .patient-avatar {
+        width: 58px;
+        height: 58px;
+        border-radius: 50%;
+        background: #0f6bff;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .patient-meta-eyebrow {
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .patient-details h3 {
+        margin: 4px 0 10px 0;
+        font-size: 20px;
+        color: #0f172a;
+    }
+
+    .patient-meta-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .meta-chip {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 500;
+        color: #475569;
+    }
+
+    .wellbeing-status-card {
+        border-radius: 16px;
+        padding: 22px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .wellbeing-status-card.badge-success {
+        background: #f0fdf4;
+        border-color: #86efac;
+    }
+
+    .wellbeing-status-card.badge-warning {
+        background: #fffbeb;
+        border-color: #fde68a;
+    }
+
+    .wellbeing-status-card.badge-danger {
+        background: #fef2f2;
+        border-color: #fca5a5;
+    }
+
+    .status-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .status-card-header span:first-child {
+        font-size: 13px;
+        font-weight: 600;
+        color: #475569;
+        text-transform: uppercase;
+    }
+
+    .status-badge {
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 999px;
+    }
+
+    .status-badge.badge-success {
+        background: #dcfce7;
+        color: #15803d;
+    }
+
+    .status-badge.badge-warning {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
+    .status-badge.badge-danger {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .status-summary-text {
+        margin: 0 0 12px 0;
+        font-size: 15px;
+        line-height: 1.5;
+        color: #1e293b;
+        font-weight: 500;
+    }
+
+    .status-footer-note {
+        font-size: 13px;
+        color: #64748b;
+        border-top: 1px dashed rgba(0, 0, 0, 0.1);
+        padding-top: 8px;
+    }
+
+    /* Section Header */
+    .wellbeing-section-header {
+        margin-bottom: 20px;
+    }
+
+    .wellbeing-section-header h3 {
+        margin: 0 0 4px 0;
+        font-size: 18px;
+        color: #0f172a;
+    }
+
+    .wellbeing-section-header p {
+        margin: 0;
+        font-size: 14px;
+        color: #64748b;
+    }
+
+    /* Vitals Grid */
+    .wellbeing-vitals-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+        margin-bottom: 30px;
+    }
+
+    .vital-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .vital-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+    }
+
+    .vital-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 14px;
+    }
+
+    .vital-icon-box {
+        font-size: 26px;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .vital-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 999px;
+    }
+
+    .vital-badge.badge-success {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .vital-badge.badge-warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .vital-badge.badge-danger {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .vital-badge.badge-info {
+        background: #e0f2fe;
+        color: #075985;
+    }
+
+    .vital-name {
+        margin: 0 0 6px 0;
+        font-size: 14px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    .vital-value {
+        font-size: 26px;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 6px;
+    }
+
+    .vital-ref {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-bottom: 10px;
+    }
+
+    .vital-note {
+        font-size: 13px;
+        color: #334155;
+        line-height: 1.4;
+        margin-bottom: 14px;
+    }
+
+    .vital-card-footer {
+        border-top: 1px solid #f1f5f9;
+        padding-top: 12px;
+        margin-top: auto;
+    }
+
+    .guidance-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: #0f6bff;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+
+    .vital-card-footer p {
+        margin: 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #475569;
+    }
+
+    /* Guidance Pillars */
+    .guidance-pillars-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+        margin-bottom: 30px;
+    }
+
+    .pillar-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 20px;
+    }
+
+    .pillar-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+
+    .pillar-icon {
+        font-size: 24px;
+    }
+
+    .pillar-header h4 {
+        margin: 0;
+        font-size: 16px;
+        color: #0f172a;
+        font-weight: 700;
+    }
+
+    .pillar-content {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #475569;
+    }
+
+    /* Disclaimer Box */
+    .wellbeing-disclaimer-box {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        background: #fefce8;
+        border: 1px solid #fef08a;
+        border-radius: 14px;
+        padding: 18px 22px;
+        margin-bottom: 30px;
+    }
+
+    .disclaimer-icon {
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+
+    .disclaimer-text strong {
+        display: block;
+        font-size: 14px;
+        color: #854d0e;
+        margin-bottom: 4px;
+    }
+
+    .disclaimer-text p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #713f12;
+    }
+
+    /* Bottom Actions */
+    .wellbeing-bottom-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        padding-top: 20px;
+        border-top: 1px solid #edf2f9;
+    }
+
+    @media print {
+
+        .sidebar,
+        .topbar,
+        .wellbeing-action-btns,
+        .wellbeing-bottom-actions {
+            display: none !important;
+        }
+
+        .main-content {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+
+        .wellbeing-page-card {
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+        }
+    }
+</style>
+{% endblock %}

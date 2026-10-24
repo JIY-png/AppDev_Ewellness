@@ -60,14 +60,21 @@
                         <div class="patients-actions">
                             <a
                                 class="patients-action-btn view"
+                                style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;"
+                                href="{{ url_for('wellbeing_assessment_page', patient_id=patient.id) }}">
+                                🌿 Wellbeing
+                            </a>
+
+                            <a
+                                class="patients-action-btn view"
                                 href="{{ url_for('patient_record_history_page', patient_id=patient.id) }}">
-                                View Records
+                                Records
                             </a>
 
                             <a
                                 class="patients-action-btn add"
                                 href="{{ url_for('add_health_record_page', patient_id=patient.id) }}">
-                                Add Record
+                                + Add
                             </a>
                         </div>
                     </td>

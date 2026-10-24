@@ -445,8 +445,257 @@ def create_health_record(patient_id, temperature, heart_rate, oxygen_saturation,
         "created_at": datetime.now().strftime("%Y-%m-%d %I:%M %p")
     }
 
-    add_record(new_record)
+    record_id = add_record(new_record)
+    if record_id:
+        new_record["id"] = record_id
     return new_record
+
+
+def get_wellbeing_assessment(record, patient):
+    """
+    Computes comprehensive, personalized wellbeing guidance based on collected screening vitals.
+    Designed to support general health monitoring without providing medical diagnoses or treatment recommendations.
+    """
+    if not record:
+        return None
+
+    try:
+        temp = float(record.get("J") or 0.0)
+    except:
+        temp = 0.0
+
+    bp_str = str(record.get("G") or "120/80")
+    try:
+        bp_parts = bp_str.split("/")
+        systolic = int(bp_parts[0]) if len(bp_parts) > 0 else 120
+        diastolic = int(bp_parts[1]) if len(bp_parts) > 1 else 80
+    except:
+        systolic, diastolic = 120, 80
+
+    try:
+        hr = int(record.get("H") or 0)
+    except:
+        hr = 0
+
+    try:
+        spo2 = int(record.get("I") or 0)
+    except:
+        spo2 = 0
+
+    try:
+        weight = float(record.get("K") or 0.0)
+    except:
+        weight = 0.0
+
+    try:
+        height = float(record.get("L") or 0.0)
+    except:
+        height = 0.0
+
+    try:
+        bmi = float(record.get("M") or 0.0)
+    except:
+        bmi = 0.0
+
+    if bmi == 0.0 and height > 0 and weight > 0:
+        bmi = calculate_bmi(height, weight)
+
+    bmi_cat = record.get("bmi_category") or get_bmi_category(bmi)
+
+    # 1. Temperature Analysis
+    if temp > 37.5:
+        temp_status = "Elevated"
+        temp_badge = "badge-danger"
+        temp_note = f"{temp:.1f}°C is above typical resting levels (36.0°C - 37.5°C)."
+        temp_tips = "Drink plenty of cool fluids, rest in a well-ventilated space, and re-check temperature regularly."
+    elif temp < 36.0 and temp > 0:
+        temp_status = "Below Average"
+        temp_badge = "badge-warning"
+        temp_note = f"{temp:.1f}°C is slightly below the standard baseline."
+        temp_tips = "Keep warm with suitable clothing and consume warm beverages."
+    else:
+        temp_status = "Normal"
+        temp_badge = "badge-success"
+        temp_note = f"{temp:.1f}°C is within optimal standard resting body temperature."
+        temp_tips = "Continue normal daily hydration and thermal comfort habits."
+
+    # 2. Blood Pressure Analysis
+    if systolic >= 140 or diastolic >= 90:
+        bp_status = "High BP (Stage 2)"
+        bp_badge = "badge-danger"
+        bp_note = f"{bp_str} mmHg is in the hypertension range."
+        bp_tips = "Limit dietary sodium, practice slow diaphragmatic breathing, and have your blood pressure reviewed by a healthcare professional."
+    elif systolic >= 130 or diastolic >= 80:
+        bp_status = "Stage 1 Elevated"
+        bp_badge = "badge-warning"
+        bp_note = f"{bp_str} mmHg is slightly above standard normal parameters."
+        bp_tips = "Engage in moderate physical activity like walking, manage daily stress, and drink adequate water throughout the day."
+    elif systolic < 90 or diastolic < 60:
+        bp_status = "Low BP"
+        bp_badge = "badge-info"
+        bp_note = f"{bp_str} mmHg is lower than standard resting range."
+        bp_tips = "Stay hydrated, stand up slowly after sitting or resting, and consult a provider if dizziness occurs."
+    else:
+        bp_status = "Optimal"
+        bp_badge = "badge-success"
+        bp_note = f"{bp_str} mmHg is within healthy resting parameters."
+        bp_tips = "Maintain a heart-healthy diet with plenty of potassium-rich foods and regular movement."
+
+    # 3. Heart Rate Analysis
+    if hr > 100:
+        hr_status = "Elevated Pulse"
+        hr_badge = "badge-danger"
+        hr_note = f"{hr} BPM is elevated for a resting heart rate."
+        hr_tips = "Allow time for physical and mental relaxation; reduce caffeine and stimulant intake."
+    elif hr < 60 and hr > 0:
+        hr_status = "Low Pulse"
+        hr_badge = "badge-warning"
+        hr_note = f"{hr} BPM is lower than average (unless physically conditioned or an athlete)."
+        hr_tips = "Ensure adequate rest and hydration; note if any fatigue or lightheadedness occurs."
+    else:
+        hr_status = "Normal Pulse"
+        hr_badge = "badge-success"
+        hr_note = f"{hr} BPM is within the healthy resting pulse range (60-100 BPM)."
+        hr_tips = "Support cardiorespiratory endurance through consistent aerobic movement."
+
+    # 4. Oxygen Saturation Analysis
+    if spo2 < 95 and spo2 > 0:
+        spo2_status = "Low Oxygen"
+        spo2_badge = "badge-danger"
+        spo2_note = f"{spo2}% is below optimal arterial oxygen saturation (≥95%)."
+        spo2_tips = "Sit upright, practice relaxed slow deep breathing, and have your oxygenation evaluated by clinic staff."
+    else:
+        spo2_status = "Normal Saturation"
+        spo2_badge = "badge-success"
+        spo2_note = f"{spo2}% indicates efficient respiratory oxygen delivery."
+        spo2_tips = "Maintain good indoor air ventilation and practice regular aerobic exercise."
+
+    # 5. BMI & Weight Analysis
+    if bmi_cat == "Underweight":
+        bmi_status = "Underweight"
+        bmi_badge = "badge-info"
+        bmi_note = f"BMI of {bmi:.1f} kg/m² is below the healthy weight threshold (<18.5)."
+        bmi_tips = "Focus on nutrient-rich whole foods, healthy fats, and balanced caloric intake."
+    elif bmi_cat in ["Overweight", "Obese"]:
+        bmi_status = bmi_cat
+        bmi_badge = "badge-warning" if bmi_cat == "Overweight" else "badge-danger"
+        bmi_note = f"BMI of {bmi:.1f} kg/m² is in the {bmi_cat.lower()} category (≥25.0)."
+        bmi_tips = "Incorporate 30 minutes of daily physical activity, increase dietary fiber, and balance portion sizes."
+    else:
+        bmi_status = "Normal Weight"
+        bmi_badge = "badge-success"
+        bmi_note = f"BMI of {bmi:.1f} kg/m² is in the ideal healthy weight bracket (18.5 - 24.9)."
+        bmi_tips = "Keep up a balanced nutritional regimen and consistent weekly exercise."
+
+    # Overall wellness score and tier
+    findings = []
+    if temp_status != "Normal": findings.append("Body Temperature")
+    if "Normal" not in bp_status and "Optimal" not in bp_status: findings.append("Blood Pressure")
+    if "Normal" not in hr_status: findings.append("Heart Rate")
+    if "Normal" not in spo2_status: findings.append("Oxygen Saturation")
+    if bmi_cat != "Normal": findings.append("BMI / Body Composition")
+
+    if not findings:
+        overall_tier = "Optimal Wellbeing"
+        tier_badge = "badge-success"
+        overall_summary = "All vital signs and physical health metrics are within expected healthy reference ranges. The patient is exhibiting optimal physiological indicators."
+    elif len(findings) <= 2 and "danger" not in [temp_badge, bp_badge, hr_badge, spo2_badge]:
+        overall_tier = "General Wellness with Minor Watchpoints"
+        tier_badge = "badge-warning"
+        overall_summary = f"Most baseline metrics are stable, with {len(findings)} area(s) ({', '.join(findings)}) flagged for routine lifestyle attention and observation."
+    else:
+        overall_tier = "Clinical Attention Recommended"
+        tier_badge = "badge-danger"
+        overall_summary = f"Screening results indicate {len(findings)} metric(s) ({', '.join(findings)}) outside optimal ranges. Healthcare personnel review is recommended."
+
+    guidance_pillars = [
+        {
+            "icon": "💧",
+            "title": "Hydration Balance",
+            "content": "Aim for 8 to 10 glasses (approx. 2 liters) of clean water daily. Hydration stabilizes cellular function, supports healthy blood viscosity, and maintains normal body temperature."
+        },
+        {
+            "icon": "🥗",
+            "title": "Wholesome Nutrition",
+            "content": "Prioritize fiber-rich vegetables, fresh fruits, whole grains, and lean proteins. Limit high-sodium processed foods and refined sugars to promote cardiovascular and metabolic health."
+        },
+        {
+            "icon": "🏃",
+            "title": "Active Movement",
+            "content": "Engage in 150 minutes of moderate aerobic activity weekly (such as brisk walking, light cycling, or swimming) paired with daily mobility stretching."
+        },
+        {
+            "icon": "😴",
+            "title": "Restorative Sleep",
+            "content": "Ensure 7 to 9 hours of uninterrupted sleep each night. Consistent sleep schedules optimize immune response, regulate cortisol levels, and support cardiovascular stability."
+        }
+    ]
+
+    return {
+        "overall_tier": overall_tier,
+        "tier_badge": tier_badge,
+        "overall_summary": overall_summary,
+        "findings": findings,
+        "disclaimer": (
+            "The Current Well Being Assessment feature has been added to support the monitoring "
+            "of users' general health and wellness. This feature considers collected health information "
+            "and provides general wellness guidance to help users better understand their screening results. "
+            "It is designed to support health monitoring without providing medical diagnoses or treatment recommendations."
+        ),
+        "vitals": [
+            {
+                "name": "Body Temperature",
+                "icon": "🌡️",
+                "value": f"{temp:.1f} °C",
+                "status": temp_status,
+                "badge": temp_badge,
+                "note": temp_note,
+                "tips": temp_tips,
+                "reference": "36.0 °C – 37.5 °C"
+            },
+            {
+                "name": "Blood Pressure",
+                "icon": "🩺",
+                "value": f"{bp_str} mmHg",
+                "status": bp_status,
+                "badge": bp_badge,
+                "note": bp_note,
+                "tips": bp_tips,
+                "reference": "<120 / <80 mmHg"
+            },
+            {
+                "name": "Heart Rate",
+                "icon": "❤️",
+                "value": f"{hr} BPM",
+                "status": hr_status,
+                "badge": hr_badge,
+                "note": hr_note,
+                "tips": hr_tips,
+                "reference": "60 – 100 BPM"
+            },
+            {
+                "name": "Oxygen Saturation",
+                "icon": "💧",
+                "value": f"{spo2}% SpO2",
+                "status": spo2_status,
+                "badge": spo2_badge,
+                "note": spo2_note,
+                "tips": spo2_tips,
+                "reference": "≥ 95%"
+            },
+            {
+                "name": "Body Mass Index",
+                "icon": "⚖️",
+                "value": f"{bmi:.1f} kg/m²",
+                "status": bmi_status,
+                "badge": bmi_badge,
+                "note": bmi_note,
+                "tips": bmi_tips,
+                "reference": "18.5 – 24.9 (Normal)"
+            }
+        ],
+        "guidance_pillars": guidance_pillars
+    }
 
 
 def dashboard_stats():
@@ -970,11 +1219,13 @@ def add_patient_page():
             "last_name": request.form.get("last_name", "").strip(),
             "gender": request.form.get("gender", "").strip(),
             "birth_date": birth_date,
-            "contact_no": "",
-            "barangay": ""
+            "contact_no": request.form.get("contact_no", "").strip(),
+            "barangay": request.form.get("barangay", "").strip()
         }
 
-        add_patient(new_patient)
+        created_patient_id = add_patient(new_patient)
+        if created_patient_id:
+            new_patient["id"] = created_patient_id
 
         # Parse blood pressure (format: "120/80")
         blood_pressure = request.form.get("blood_pressure", "").strip()
@@ -986,11 +1237,11 @@ def add_patient_page():
             systolic = 0
             diastolic = 0
 
-        body_temp = float(request.form.get("body_temp"))
-        heart_rate = int(request.form.get("heart_rate"))
-        oxygen_saturation = int(request.form.get("oxygen_saturation"))
-        height = float(request.form.get("height"))
-        weight = float(request.form.get("weight"))
+        body_temp = float(request.form.get("body_temp", 36.5))
+        heart_rate = int(request.form.get("heart_rate", 75))
+        oxygen_saturation = int(request.form.get("oxygen_saturation", 98))
+        height = float(request.form.get("height", 160))
+        weight = float(request.form.get("weight", 55))
         bmi_input = request.form.get("bmi", "").strip()
 
         # Calculate BMI if not provided
@@ -1016,8 +1267,8 @@ def add_patient_page():
             action=f'Added patient manually with initial health record for {new_patient["first_name"]} {new_patient["last_name"]}'
         )
 
-        flash("Patient and initial health record saved successfully.", "success")
-        return redirect(url_for("patients_page"))
+        flash("Patient registered and health assessment recorded. Reviewing Current Well Being Assessment.", "success")
+        return redirect(url_for("wellbeing_assessment_page", patient_id=new_patient["id"], record_id=new_record.get("id")))
 
     return render_template(
         "admin/add_patient.html",
@@ -1244,6 +1495,51 @@ def download_patient_history(patient_id):
     )
 
 
+@app.route("/patients/<int:patient_id>/wellbeing-assessment")
+@app.route("/patients/<int:patient_id>/wellbeing-assessment/<int:record_id>")
+@login_required
+def wellbeing_assessment_page(patient_id, record_id=None):
+    patient = get_patient_by_id(patient_id)
+    if not patient:
+        flash("Patient not found.", "error")
+        return redirect(url_for("patients_page"))
+
+    patient_records = get_records_for_patient(patient_id)
+    if not patient_records:
+        flash("No health assessment records found for this patient.", "warning")
+        return redirect(url_for("patient_record_history_page", patient_id=patient_id))
+
+    selected_record = None
+    if record_id:
+        for r in patient_records:
+            if r.get("id") == record_id:
+                selected_record = r
+                break
+
+    if not selected_record:
+        selected_record = patient_records[-1]
+
+    patient["age"] = calculate_age(patient.get("birth_date", ""))
+
+    assessment = get_wellbeing_assessment(selected_record, patient)
+
+    add_access_log(
+        user=get_current_admin_name(),
+        role=get_current_admin_role(),
+        action=f'Viewed Current Well Being Assessment for {patient.get("first_name")} {patient.get("last_name")}'
+    )
+
+    return render_template(
+        "admin/wellbeing_assessment.html",
+        title="Current Well Being Assessment",
+        active_page="patients",
+        patient=patient,
+        record=selected_record,
+        assessment=assessment,
+        all_records=list(reversed(patient_records))
+    )
+
+
 @app.route("/add-health-record", methods=["GET", "POST"])
 @login_required
 def add_health_record_page():
@@ -1252,13 +1548,13 @@ def add_health_record_page():
     if request.method == "POST":
         patient_id = int(request.form.get("patient_id"))
 
-        temperature = float(request.form.get("temperature"))
-        heart_rate = int(request.form.get("heart_rate"))
-        oxygen_saturation = int(request.form.get("oxygen_saturation"))
-        systolic = int(request.form.get("systolic"))
-        diastolic = int(request.form.get("diastolic"))
-        height = float(request.form.get("height"))
-        weight = float(request.form.get("weight"))
+        temperature = float(request.form.get("temperature", 36.5))
+        heart_rate = int(request.form.get("heart_rate", 75))
+        oxygen_saturation = int(request.form.get("oxygen_saturation", 98))
+        systolic = int(request.form.get("systolic", 120))
+        diastolic = int(request.form.get("diastolic", 80))
+        height = float(request.form.get("height", 160))
+        weight = float(request.form.get("weight", 55))
 
         new_record = create_health_record(
             patient_id=patient_id,
@@ -1277,8 +1573,8 @@ def add_health_record_page():
             action=f'Added follow-up health record for {new_record["C"]} {new_record["D"]}'
         )
 
-        flash("Health record added successfully.", "success")
-        return redirect(url_for("patient_record_history_page", patient_id=patient_id))
+        flash("Health record added successfully. Reviewing Current Well Being Assessment.", "success")
+        return redirect(url_for("wellbeing_assessment_page", patient_id=patient_id, record_id=new_record.get("id")))
 
     if not selected_patient_id:
         flash("Please select a patient before adding a health record.", "warning")
