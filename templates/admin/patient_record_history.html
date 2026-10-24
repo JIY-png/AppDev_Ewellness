@@ -91,6 +91,68 @@
         </article>
     </div>
 
+    <!-- Patient Longitudinal Vitals Trend Graph -->
+    {% if records|length > 0 %}
+    <div class="phr-trend-card vitals-visualization-panel" style="margin-top: 24px; margin-bottom: 24px; padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);">
+        <div class="phr-trend-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;">
+            <div>
+                <h4 style="margin: 0 0 4px; font-size: 1.15rem; color: #1e293b; font-weight: 700;">Longitudinal Health Trends</h4>
+                <p style="margin: 0; font-size: 0.88rem; color: #64748b;">Tracking vital signs trajectory across {{ records|length }} recorded clinical visits</p>
+            </div>
+
+            <div class="vitals-chart-controls">
+                <label for="patientChartRange">View by</label>
+                <select id="patientChartRange" class="vitals-chart-range">
+                    <option value="all" selected>All Visits</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Metric Switcher Tabs -->
+        <div class="metric-switcher-bar phr-metric-bar">
+            <button type="button" class="metric-tab-btn active" data-metric="bp">
+                <span>🩺</span> Blood Pressure
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="hr">
+                <span>❤️</span> Pulse Rate
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="spo2">
+                <span>💧</span> SpO2 Oxygen
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="temp">
+                <span>🌡️</span> Body Temp
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="bmi">
+                <span>⚖️</span> BMI & Weight
+            </button>
+        </div>
+
+        <div
+            class="vitals-trend-chart-container"
+            id="patientVitalsChart"
+            data-default-metric="bp"
+            data-records='{{ patient_chart_records | tojson }}'>
+
+            <div class="vitals-line-chart-box">
+                <svg
+                    id="patientVitalsChartSvg"
+                    viewBox="0 0 880 340"
+                    preserveAspectRatio="none"
+                    aria-label="Patient vital signs trend line graph">
+                </svg>
+            </div>
+
+            <div class="vitals-chart-legend"></div>
+
+            <p class="vitals-chart-note" id="patientVitalsChartNote" style="margin-top: 10px; font-size: 0.85rem; color: #64748b;">
+                Showing patient's Blood Pressure trajectory over time.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="phr-search-row">
         <input
             type="text"

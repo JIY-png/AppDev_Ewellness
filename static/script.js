@@ -75,16 +75,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 documentationReduction.textContent = data.stats.documentation_reduction + "%";
             }
 
-            // Update BMI chart data
-            const bmiChart = document.getElementById("bmiLineChart");
-            if (bmiChart) {
-                bmiChart.setAttribute("data-records", JSON.stringify(data.bmi_chart_records));
-                // Trigger chart redraw
-                const bmiChartNote = document.getElementById("bmiLineChartNote");
-                if (bmiChartNote) {
-                    bmiChartNote.textContent = "BMI trend updated.";
+            // Update Vitals & BMI chart data
+            const vitalsCharts = document.querySelectorAll(".vitals-trend-chart-container, #bmiLineChart, #vitalsLineChart");
+            vitalsCharts.forEach(function (chart) {
+                const updatedRecords = data.vitals_chart_records || data.bmi_chart_records;
+                if (updatedRecords) {
+                    chart.setAttribute("data-records", JSON.stringify(updatedRecords));
+                    chart.dispatchEvent(new Event("recordsUpdated"));
                 }
-            }
+            });
 
             // Update donut chart
             const donutChart = document.querySelector(".donut-chart");
@@ -1631,38 +1630,27 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 /* ============================= */
-/* BMI TREND OVERVIEW LINE GRAPH */
-/* Daily / Weekly / Monthly / Yearly / Custom Range */
+/* ALL-VITALS TREND & LONGITUDINAL ANALYTICS ENGINE */
+/* Supports: Blood Pressure (Systolic/Diastolic dual lines), */
+/* Heart Rate, SpO2, Temperature, BMI, and Weight with clinical threshold bands, */
+/* interactive tooltips, multi-range filtering, and patient filtering. */
 /* ============================= */
 
 document.addEventListener("DOMContentLoaded", function () {
-    const chartContainer = document.getElementById("bmiLineChart");
-    const chartSvg = document.getElementById("bmiLineChartSvg");
-    const chartRange = document.getElementById("bmiChartRange");
-    const chartNote = document.getElementById("bmiLineChartNote");
-    const customRangeBox = document.getElementById("bmiCustomRange");
-    const startDateInput = document.getElementById("bmiStartDate");
-    const endDateInput = document.getElementById("bmiEndDate");
-
-    if (!chartContainer || !chartSvg || !chartRange) {
-        return;
-    }
-
-    let records = [];
-
-    try {
-        records = JSON.parse(chartContainer.getAttribute("data-records") || "[]");
-    } catch (error) {
-        records = [];
+    // Floating tooltip singleton
+    let chartTooltip = document.getElementById("vitalsGlobalTooltip");
+    if (!chartTooltip) {
+        chartTooltip = document.createElement("div");
+        chartTooltip.id = "vitalsGlobalTooltip";
+        chartTooltip.className = "vitals-chart-tooltip";
+        chartTooltip.style.display = "none";
+        document.body.appendChild(chartTooltip);
     }
 
     function parseRecordDate(value) {
-        if (!value) {
-            return null;
-        }
+        if (!value) return null;
 
-        const parts = value.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})\s+(AM|PM)$/i);
-
+        const parts = String(value).trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
         if (!parts) {
             const fallbackDate = new Date(value);
             return Number.isNaN(fallbackDate.getTime()) ? null : fallbackDate;
@@ -1670,15 +1658,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
         let hour = Number(parts[4]);
         const minute = Number(parts[5]);
-        const meridiem = parts[6].toUpperCase();
+        const meridiem = parts[6] ? parts[6].toUpperCase() : null;
 
-        if (meridiem === "PM" && hour !== 12) {
-            hour += 12;
-        }
-
-        if (meridiem === "AM" && hour === 12) {
-            hour = 0;
-        }
+        if (meridiem === "PM" && hour !== 12) hour += 12;
+        if (meridiem === "AM" && hour === 12) hour = 0;
 
         return new Date(
             Number(parts[1]),
@@ -1687,65 +1670,6 @@ document.addEventListener("DOMContentLoaded", function () {
             hour,
             minute
         );
-    }
-
-    function prepareRecords() {
-        return records
-            .map(function (record) {
-                return {
-                    bmi: Number(record.bmi),
-                    category: record.category,
-                    patientName: record.patient_name || "Patient",
-                    date: parseRecordDate(record.created_at)
-                };
-            })
-            .filter(function (record) {
-                return record.date !== null && Number.isFinite(record.bmi) && record.bmi > 0;
-            })
-            .sort(function (a, b) {
-                return a.date - b.date;
-            });
-    }
-
-    function getStartOfWeek(date) {
-        const start = new Date(date);
-        const day = start.getDay();
-
-        start.setDate(start.getDate() - day);
-        start.setHours(0, 0, 0, 0);
-
-        return start;
-    }
-
-    function getEndOfDay(date) {
-        const end = new Date(date);
-        end.setHours(23, 59, 59, 999);
-        return end;
-    }
-
-    function getDateFromInput(value, endOfDay) {
-        if (!value) {
-            return null;
-        }
-
-        const parts = value.split("-");
-
-        if (parts.length !== 3) {
-            return null;
-        }
-
-        const date = new Date(
-            Number(parts[0]),
-            Number(parts[1]) - 1,
-            Number(parts[2])
-        );
-
-        if (endOfDay) {
-            return getEndOfDay(date);
-        }
-
-        date.setHours(0, 0, 0, 0);
-        return date;
     }
 
     function formatShortDate(date) {
@@ -1758,359 +1682,815 @@ document.addEventListener("DOMContentLoaded", function () {
     function formatDateTime(date) {
         return date.toLocaleDateString("en-US", {
             month: "short",
-            day: "numeric"
+            day: "numeric",
+            year: "numeric"
         }) + " " + date.toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit"
         });
     }
 
-    function getFilteredRecords(range) {
-        const now = new Date();
-        const parsedRecords = prepareRecords();
+    function getStartOfWeek(date) {
+        const start = new Date(date);
+        const day = start.getDay();
+        start.setDate(start.getDate() - day);
+        start.setHours(0, 0, 0, 0);
+        return start;
+    }
 
-        if (range === "daily") {
-            const start = new Date(now);
-            start.setHours(0, 0, 0, 0);
+    function getEndOfDay(date) {
+        const end = new Date(date);
+        end.setHours(23, 59, 59, 999);
+        return end;
+    }
 
-            const end = getEndOfDay(now);
+    function getDateFromInput(value, endOfDay) {
+        if (!value) return null;
+        const parts = value.split("-");
+        if (parts.length !== 3) return null;
 
-            return parsedRecords.filter(function (record) {
-                return record.date >= start && record.date <= end;
-            });
+        const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (endOfDay) return getEndOfDay(date);
+        date.setHours(0, 0, 0, 0);
+        return date;
+    }
+
+    // Initialize all vital chart instances on the page
+    const chartContainers = document.querySelectorAll(
+        ".vitals-trend-chart-container, #vitalsLineChart, #bmiLineChart"
+    );
+
+    chartContainers.forEach(function (container) {
+        setupVitalsChartInstance(container);
+    });
+
+    function setupVitalsChartInstance(container) {
+        const rootCard = container.closest(".vitals-visualization-panel, .bmi-visualization-panel, .panel") || container.parentElement;
+
+        const chartSvg = container.querySelector("svg") || document.getElementById(container.id + "Svg") || document.getElementById("bmiLineChartSvg");
+        if (!chartSvg) return;
+
+        // Metric selector tabs or dropdown
+        const metricTabs = rootCard.querySelectorAll(".metric-tab-btn");
+        const metricSelect = rootCard.querySelector(".vitals-metric-select");
+
+        // Range selector & custom range
+        const chartRange = rootCard.querySelector(".vitals-chart-range, #bmiChartRange");
+        const customRangeBox = rootCard.querySelector(".vitals-custom-range, #bmiCustomRange");
+        const startDateInput = rootCard.querySelector(".vitals-start-date, #bmiStartDate");
+        const endDateInput = rootCard.querySelector(".vitals-end-date, #bmiEndDate");
+
+        // Patient filter dropdown (if present)
+        const patientFilter = rootCard.querySelector(".vitals-patient-filter, #vitalsPatientFilter");
+
+        // Note / description paragraph
+        const chartNote = rootCard.querySelector(".vitals-chart-note, #bmiLineChartNote");
+
+        // Dynamic stats banner elements (if present)
+        const statAvgEl = rootCard.querySelector("[data-stat='avg']");
+        const statTargetEl = rootCard.querySelector("[data-stat='target-pct']");
+        const statMinEl = rootCard.querySelector("[data-stat='min']");
+        const statMaxEl = rootCard.querySelector("[data-stat='max']");
+        const statCountEl = rootCard.querySelector("[data-stat='count']");
+        const legendContainer = rootCard.querySelector(".vitals-chart-legend, .bmi-chart-legend");
+
+        let activeMetric = container.getAttribute("data-default-metric") || "bp";
+        // Default to bp unless it's strictly legacy bmi container with only bmi
+        if (container.id === "bmiLineChart" && !container.hasAttribute("data-default-metric") && !rootCard.querySelector(".metric-tab-btn")) {
+            activeMetric = "bmi";
         }
 
-        if (range === "weekly") {
-            const start = getStartOfWeek(now);
-            const end = new Date(start);
-
-            end.setDate(start.getDate() + 7);
-
-            return parsedRecords.filter(function (record) {
-                return record.date >= start && record.date < end;
-            });
+        let rawRecords = [];
+        try {
+            rawRecords = JSON.parse(container.getAttribute("data-records") || "[]");
+        } catch (e) {
+            rawRecords = [];
         }
 
-        if (range === "monthly") {
-            return parsedRecords.filter(function (record) {
-                return record.date.getFullYear() === now.getFullYear() &&
-                    record.date.getMonth() === now.getMonth();
-            });
-        }
+        function parseRecord(r) {
+            const date = parseRecordDate(r.created_at || (r.A && r.B ? r.A + " " + r.B : ""));
 
-        if (range === "yearly") {
-            return parsedRecords.filter(function (record) {
-                return record.date.getFullYear() === now.getFullYear();
-            });
-        }
-
-        if (range === "custom") {
-            const start = getDateFromInput(startDateInput ? startDateInput.value : "", false);
-            const end = getDateFromInput(endDateInput ? endDateInput.value : "", true);
-
-            if (!start || !end) {
-                return parsedRecords;
+            // Parse blood pressure
+            let sys = Number(r.systolic || 0);
+            let dia = Number(r.diastolic || 0);
+            if ((!sys || !dia) && (r.G || r.blood_pressure || r.bp_str)) {
+                const bpStr = String(r.G || r.blood_pressure || r.bp_str);
+                if (bpStr.includes("/")) {
+                    const parts = bpStr.split("/");
+                    sys = Number(parts[0]) || 0;
+                    dia = Number(parts[1]) || 0;
+                }
             }
 
-            return parsedRecords.filter(function (record) {
-                return record.date >= start && record.date <= end;
-            });
+            const hr = Number(r.heart_rate || r.H || 0);
+            const spo2 = Number(r.oxygen_saturation || r.I || 0);
+            const temp = Number(r.temperature || r.J || 0);
+            const bmi = Number(r.bmi || r.M || 0);
+            const weight = Number(r.weight || r.K || 0);
+            const height = Number(r.height || r.L || 0);
+
+            const patientName = r.patient_name || (r.C && r.D ? (r.C + " " + r.D).trim() : "Patient");
+            const patientId = r.patient_id ? String(r.patient_id) : "";
+
+            return {
+                raw: r,
+                date: date,
+                patientName: patientName,
+                patientId: patientId,
+                systolic: sys,
+                diastolic: dia,
+                bpStr: sys && dia ? `${sys}/${dia}` : (r.G || "—"),
+                bpCategory: r.bp_category || (sys >= 140 || dia >= 90 ? "Stage 2 High BP" : (sys >= 130 || dia >= 80 ? "Stage 1 Elevated" : (sys < 90 ? "Low BP" : "Optimal"))),
+                heartRate: hr,
+                hrCategory: r.hr_category || (hr > 100 ? "Tachycardia" : (hr < 60 && hr > 0 ? "Bradycardia" : "Normal")),
+                oxygenSaturation: spo2,
+                spo2Category: r.spo2_category || (spo2 >= 95 ? "Normal" : "Low SpO2"),
+                temperature: temp,
+                tempCategory: r.temp_category || (temp > 37.5 ? "Elevated / Fever" : (temp < 36.0 && temp > 0 ? "Below Normal" : "Normal")),
+                bmi: bmi,
+                bmiCategory: r.bmi_category || (bmi < 18.5 ? "Underweight" : (bmi < 25 ? "Normal" : (bmi < 30 ? "Overweight" : "Obese"))),
+                weight: weight,
+                height: height,
+                status: r.status || "Normal"
+            };
         }
 
-        return parsedRecords;
-    }
-
-    function getBmiCategory(bmi) {
-        if (bmi < 18.5) {
-            return "below-normal";
-        }
-
-        if (bmi < 25) {
-            return "normal";
-        }
-
-        if (bmi < 30) {
-            return "overweight";
-        }
-
-        return "obese";
-    }
-
-    function getPointColor(bmi) {
-        const category = getBmiCategory(bmi);
-
-        if (category === "below-normal") {
-            return "#f59e0b";
-        }
-
-        if (category === "normal") {
-            return "#0b9f6a";
-        }
-
-        if (category === "overweight") {
-            return "#f97316";
-        }
-
-        return "#dc2626";
-    }
-
-    function getCategoryLabel(bmi) {
-        const category = getBmiCategory(bmi);
-
-        if (category === "below-normal") {
-            return "Below Normal";
-        }
-
-        if (category === "normal") {
-            return "Normal";
-        }
-
-        if (category === "overweight") {
-            return "Overweight";
-        }
-
-        return "Obese";
-    }
-
-    function getXAxisLabel(record, range) {
-        if (range === "daily") {
-            return record.date.toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit"
-            });
-        }
-
-        if (range === "yearly") {
-            return record.date.toLocaleDateString("en-US", {
-                month: "short"
-            });
-        }
-
-        return formatShortDate(record.date);
-    }
-
-    function renderBmiTrendChart() {
-        const range = chartRange.value;
-        const filteredRecords = getFilteredRecords(range);
-
-        const width = 720;
-        const height = 320;
-        const paddingLeft = 56;
-        const paddingRight = 28;
-        const paddingTop = 26;
-        const paddingBottom = 58;
-
-        const chartWidth = width - paddingLeft - paddingRight;
-        const chartHeight = height - paddingTop - paddingBottom;
-
-        const bmiValues = filteredRecords.map(function (record) {
-            return record.bmi;
-        });
-
-        let minY = 15;
-        let maxY = 35;
-
-        if (bmiValues.length > 0) {
-            minY = Math.max(0, Math.floor(Math.min(...bmiValues, 18.5) - 2));
-            maxY = Math.ceil(Math.max(...bmiValues, 30) + 2);
-        }
-
-        function getX(index) {
-            if (filteredRecords.length === 1) {
-                return paddingLeft + chartWidth / 2;
+        function getPreparedRecords() {
+            try {
+                rawRecords = JSON.parse(container.getAttribute("data-records") || "[]");
+            } catch (e) {
+                rawRecords = [];
             }
 
-            return paddingLeft + (index / (filteredRecords.length - 1)) * chartWidth;
+            return rawRecords
+                .map(parseRecord)
+                .filter(function (r) {
+                    return r.date !== null;
+                })
+                .sort(function (a, b) {
+                    return a.date - b.date;
+                });
         }
 
-        function getY(value) {
-            return paddingTop + chartHeight - ((value - minY) / (maxY - minY)) * chartHeight;
+        function filterRecords() {
+            let records = getPreparedRecords();
+
+            // Patient filter
+            if (patientFilter && patientFilter.value && patientFilter.value !== "all") {
+                const targetPid = String(patientFilter.value);
+                records = records.filter(function (r) {
+                    return r.patientId === targetPid || r.patientName.toLowerCase() === targetPid.toLowerCase();
+                });
+            }
+
+            // Range filter
+            const range = chartRange ? chartRange.value : "all";
+            const now = new Date();
+
+            if (range === "daily") {
+                const start = new Date(now);
+                start.setHours(0, 0, 0, 0);
+                const end = getEndOfDay(now);
+                records = records.filter(function (r) {
+                    return r.date >= start && r.date <= end;
+                });
+            } else if (range === "weekly") {
+                const start = getStartOfWeek(now);
+                const end = new Date(start);
+                end.setDate(start.getDate() + 7);
+                records = records.filter(function (r) {
+                    return r.date >= start && r.date < end;
+                });
+            } else if (range === "monthly") {
+                records = records.filter(function (r) {
+                    return r.date.getFullYear() === now.getFullYear() && r.date.getMonth() === now.getMonth();
+                });
+            } else if (range === "yearly") {
+                records = records.filter(function (r) {
+                    return r.date.getFullYear() === now.getFullYear();
+                });
+            } else if (range === "custom") {
+                const start = getDateFromInput(startDateInput ? startDateInput.value : "", false);
+                const end = getDateFromInput(endDateInput ? endDateInput.value : "", true);
+                if (start && end) {
+                    records = records.filter(function (r) {
+                        return r.date >= start && r.date <= end;
+                    });
+                }
+            }
+
+            // Metric valid filter
+            if (activeMetric === "bp") {
+                return records.filter(function (r) { return r.systolic > 0 && r.diastolic > 0; });
+            } else if (activeMetric === "hr") {
+                return records.filter(function (r) { return r.heartRate > 0; });
+            } else if (activeMetric === "spo2") {
+                return records.filter(function (r) { return r.oxygenSaturation > 0; });
+            } else if (activeMetric === "temp") {
+                return records.filter(function (r) { return r.temperature > 0; });
+            } else if (activeMetric === "weight") {
+                return records.filter(function (r) { return r.weight > 0; });
+            } else { // bmi
+                return records.filter(function (r) { return r.bmi > 0; });
+            }
         }
 
-        let svgContent = "";
+        function updateLegend() {
+            if (!legendContainer) return;
 
-        const ySteps = 5;
-        const stepValue = (maxY - minY) / ySteps;
-
-        for (let index = 0; index <= ySteps; index++) {
-            const value = Number((minY + stepValue * index).toFixed(1));
-            const y = getY(value);
-
-            svgContent += `
-                <line
-                    x1="${paddingLeft}"
-                    y1="${y}"
-                    x2="${width - paddingRight}"
-                    y2="${y}"
-                    class="bmi-grid-line" />
-
-                <text
-                    x="${paddingLeft - 14}"
-                    y="${y + 4}"
-                    class="bmi-axis-text"
-                    text-anchor="end">${value}</text>
-            `;
+            if (activeMetric === "bp") {
+                legendContainer.innerHTML = `
+                    <span><i class="legend-color-dot" style="background:#ef4444;"></i> Systolic (mmHg)</span>
+                    <span><i class="legend-color-dot" style="background:#0284c7;"></i> Diastolic (mmHg)</span>
+                    <span><i class="legend-ref-line" style="border-color:#10b981;"></i> Normal Target (&lt;120/&lt;80)</span>
+                    <span><i class="legend-ref-line" style="border-color:#ef4444;"></i> Hypertension (&ge;140/&ge;90)</span>
+                `;
+            } else if (activeMetric === "hr") {
+                legendContainer.innerHTML = `
+                    <span><i class="legend-color-dot" style="background:#8b5cf6;"></i> Pulse Rate (BPM)</span>
+                    <span><i class="legend-zone-box" style="background:rgba(139, 92, 246, 0.15);"></i> Normal Resting Zone (60 - 100)</span>
+                    <span><i class="legend-ref-line" style="border-color:#f59e0b;"></i> Tachycardia Threshold (&gt;100)</span>
+                `;
+            } else if (activeMetric === "spo2") {
+                legendContainer.innerHTML = `
+                    <span><i class="legend-color-dot" style="background:#06b6d4;"></i> SpO2 Saturation (%)</span>
+                    <span><i class="legend-ref-line" style="border-color:#10b981;"></i> Optimal Target (&ge;95%)</span>
+                    <span><i class="legend-ref-line" style="border-color:#dc2626;"></i> Hypoxia Alert (&lt;95%)</span>
+                `;
+            } else if (activeMetric === "temp") {
+                legendContainer.innerHTML = `
+                    <span><i class="legend-color-dot" style="background:#f59e0b;"></i> Body Temp (&deg;C)</span>
+                    <span><i class="legend-zone-box" style="background:rgba(245, 158, 11, 0.15);"></i> Normal Range (36.0 - 37.5&deg;C)</span>
+                    <span><i class="legend-ref-line" style="border-color:#dc2626;"></i> Fever Line (37.5&deg;C)</span>
+                `;
+            } else { // bmi
+                legendContainer.innerHTML = `
+                    <span><i class="legend-color-dot" style="background:#f59e0b;"></i> Below Normal (&lt;18.5)</span>
+                    <span><i class="legend-color-dot" style="background:#10b981;"></i> Normal (18.5 - 24.9)</span>
+                    <span><i class="legend-color-dot" style="background:#f97316;"></i> Overweight (25 - 29.9)</span>
+                    <span><i class="legend-color-dot" style="background:#dc2626;"></i> Obese (&ge;30)</span>
+                `;
+            }
         }
 
-        [18.5, 25, 30].forEach(function (value) {
-            if (value < minY || value > maxY) {
+        function updateStatStrip(records) {
+            if (!statAvgEl && !statTargetEl && !statMinEl && !statMaxEl && !statCountEl) return;
+
+            const count = records.length;
+            if (statCountEl) statCountEl.textContent = count;
+
+            if (count === 0) {
+                if (statAvgEl) statAvgEl.textContent = "—";
+                if (statTargetEl) statTargetEl.textContent = "—";
+                if (statMinEl) statMinEl.textContent = "—";
+                if (statMaxEl) statMaxEl.textContent = "—";
                 return;
             }
 
-            const y = getY(value);
+            if (activeMetric === "bp") {
+                const sysVals = records.map(function (r) { return r.systolic; });
+                const diaVals = records.map(function (r) { return r.diastolic; });
+                const avgSys = Math.round(sysVals.reduce(function (a, b) { return a + b; }, 0) / count);
+                const avgDia = Math.round(diaVals.reduce(function (a, b) { return a + b; }, 0) / count);
+                const normalCount = records.filter(function (r) { return r.systolic < 120 && r.diastolic < 80; }).length;
 
-            svgContent += `
-                <line
-                    x1="${paddingLeft}"
-                    y1="${y}"
-                    x2="${width - paddingRight}"
-                    y2="${y}"
-                    class="bmi-reference-line" />
+                if (statAvgEl) statAvgEl.textContent = `${avgSys}/${avgDia} mmHg`;
+                if (statTargetEl) statTargetEl.textContent = `${Math.round((normalCount / count) * 100)}% Optimal`;
+                if (statMinEl) statMinEl.textContent = `${Math.min(...sysVals)}/${Math.min(...diaVals)}`;
+                if (statMaxEl) statMaxEl.textContent = `${Math.max(...sysVals)}/${Math.max(...diaVals)}`;
+            } else if (activeMetric === "hr") {
+                const vals = records.map(function (r) { return r.heartRate; });
+                const avg = Math.round(vals.reduce(function (a, b) { return a + b; }, 0) / count);
+                const normalCount = records.filter(function (r) { return r.heartRate >= 60 && r.heartRate <= 100; }).length;
 
-                <text
-                    x="${width - paddingRight - 6}"
-                    y="${y - 6}"
-                    class="bmi-reference-text"
-                    text-anchor="end">${value}</text>
-            `;
-        });
+                if (statAvgEl) statAvgEl.textContent = `${avg} BPM`;
+                if (statTargetEl) statTargetEl.textContent = `${Math.round((normalCount / count) * 100)}% Normal`;
+                if (statMinEl) statMinEl.textContent = `${Math.min(...vals)} BPM`;
+                if (statMaxEl) statMaxEl.textContent = `${Math.max(...vals)} BPM`;
+            } else if (activeMetric === "spo2") {
+                const vals = records.map(function (r) { return r.oxygenSaturation; });
+                const avg = (vals.reduce(function (a, b) { return a + b; }, 0) / count).toFixed(1);
+                const normalCount = records.filter(function (r) { return r.oxygenSaturation >= 95; }).length;
 
-        svgContent += `
-            <line
-                x1="${paddingLeft}"
-                y1="${paddingTop}"
-                x2="${paddingLeft}"
-                y2="${height - paddingBottom}"
-                class="bmi-axis-line" />
+                if (statAvgEl) statAvgEl.textContent = `${avg}%`;
+                if (statTargetEl) statTargetEl.textContent = `${Math.round((normalCount / count) * 100)}% Normal`;
+                if (statMinEl) statMinEl.textContent = `${Math.min(...vals)}%`;
+                if (statMaxEl) statMaxEl.textContent = `${Math.max(...vals)}%`;
+            } else if (activeMetric === "temp") {
+                const vals = records.map(function (r) { return r.temperature; });
+                const avg = (vals.reduce(function (a, b) { return a + b; }, 0) / count).toFixed(1);
+                const normalCount = records.filter(function (r) { return r.temperature >= 36.0 && r.temperature <= 37.5; }).length;
 
-            <line
-                x1="${paddingLeft}"
-                y1="${height - paddingBottom}"
-                x2="${width - paddingRight}"
-                y2="${height - paddingBottom}"
-                class="bmi-axis-line" />
-        `;
+                if (statAvgEl) statAvgEl.textContent = `${avg} °C`;
+                if (statTargetEl) statTargetEl.textContent = `${Math.round((normalCount / count) * 100)}% Normal`;
+                if (statMinEl) statMinEl.textContent = `${Math.min(...vals).toFixed(1)} °C`;
+                if (statMaxEl) statMaxEl.textContent = `${Math.max(...vals).toFixed(1)} °C`;
+            } else { // bmi
+                const vals = records.map(function (r) { return r.bmi; });
+                const avg = (vals.reduce(function (a, b) { return a + b; }, 0) / count).toFixed(1);
+                const normalCount = records.filter(function (r) { return r.bmi >= 18.5 && r.bmi < 25; }).length;
 
-        filteredRecords.forEach(function (record, index) {
-            const x = getX(index);
-
-            const shouldShowLabel =
-                filteredRecords.length <= 8 ||
-                index === 0 ||
-                index === filteredRecords.length - 1 ||
-                index % Math.ceil(filteredRecords.length / 6) === 0;
-
-            if (shouldShowLabel) {
-                svgContent += `
-                    <text
-                        x="${x}"
-                        y="${height - 24}"
-                        class="bmi-axis-text"
-                        text-anchor="middle">${getXAxisLabel(record, range)}</text>
-                `;
-            }
-        });
-
-        if (filteredRecords.length > 1) {
-            for (let index = 1; index < filteredRecords.length; index++) {
-                const previousRecord = filteredRecords[index - 1];
-                const currentRecord = filteredRecords[index];
-
-                const x1 = getX(index - 1);
-                const y1 = getY(previousRecord.bmi);
-                const x2 = getX(index);
-                const y2 = getY(currentRecord.bmi);
-
-                svgContent += `
-                    <line
-                        x1="${x1}"
-                        y1="${y1}"
-                        x2="${x2}"
-                        y2="${y2}"
-                        stroke="${getPointColor(currentRecord.bmi)}"
-                        stroke-width="2.8"
-                        stroke-linecap="round"
-                        class="bmi-trend-segment" />
-                `;
+                if (statAvgEl) statAvgEl.textContent = `${avg} kg/m²`;
+                if (statTargetEl) statTargetEl.textContent = `${Math.round((normalCount / count) * 100)}% Normal`;
+                if (statMinEl) statMinEl.textContent = `${Math.min(...vals).toFixed(1)}`;
+                if (statMaxEl) statMaxEl.textContent = `${Math.max(...vals).toFixed(1)}`;
             }
         }
 
-        filteredRecords.forEach(function (record, index) {
-            const x = getX(index);
-            const y = getY(record.bmi);
-            const color = getPointColor(record.bmi);
-            const categoryLabel = getCategoryLabel(record.bmi);
+        function renderChart() {
+            const records = filterRecords();
+            updateLegend();
+            updateStatStrip(records);
 
-            svgContent += `
-                <circle
-                    cx="${x}"
-                    cy="${y}"
-                    r="4.8"
-                    fill="${color}"
-                    class="bmi-average-point">
-                    <title>${record.patientName} - ${formatDateTime(record.date)}: BMI ${record.bmi} (${categoryLabel})</title>
-                </circle>
+            const width = 880;
+            const height = 340;
+            const paddingLeft = 68;
+            const paddingRight = 36;
+            const paddingTop = 32;
+            const paddingBottom = 60;
 
-                <text
-                    x="${x}"
-                    y="${y - 10}"
-                    class="bmi-point-label"
-                    text-anchor="middle">${record.bmi}</text>
+            const chartWidth = width - paddingLeft - paddingRight;
+            const chartHeight = height - paddingTop - paddingBottom;
+
+            // Calculate min and max Y for the active metric
+            let minY = 0;
+            let maxY = 100;
+            let referenceLines = [];
+            let shadedZones = [];
+
+            if (activeMetric === "bp") {
+                const sysList = records.map(function (r) { return r.systolic; });
+                const diaList = records.map(function (r) { return r.diastolic; });
+                const allVals = [...sysList, ...diaList];
+
+                minY = allVals.length ? Math.max(40, Math.floor(Math.min(...allVals, 60) - 10)) : 50;
+                maxY = allVals.length ? Math.min(220, Math.ceil(Math.max(...allVals, 150) + 15)) : 180;
+
+                // Thresholds
+                referenceLines = [
+                    { value: 140, label: "140 (Hypertension)", color: "#ef4444", dash: "5,4" },
+                    { value: 120, label: "120 (Optimal Sys)", color: "#10b981", dash: "4,4" },
+                    { value: 80, label: "80 (Optimal Dia)", color: "#0284c7", dash: "4,4" }
+                ];
+            } else if (activeMetric === "hr") {
+                const vals = records.map(function (r) { return r.heartRate; });
+                minY = vals.length ? Math.max(30, Math.floor(Math.min(...vals, 55) - 10)) : 40;
+                maxY = vals.length ? Math.min(200, Math.ceil(Math.max(...vals, 110) + 15)) : 140;
+
+                referenceLines = [
+                    { value: 100, label: "100 (Tachycardia)", color: "#f59e0b", dash: "5,4" },
+                    { value: 60, label: "60 (Bradycardia)", color: "#0284c7", dash: "4,4" }
+                ];
+
+                shadedZones = [
+                    { yMin: 60, yMax: 100, color: "rgba(139, 92, 246, 0.08)" }
+                ];
+            } else if (activeMetric === "spo2") {
+                const vals = records.map(function (r) { return r.oxygenSaturation; });
+                minY = vals.length ? Math.max(75, Math.floor(Math.min(...vals, 92) - 3)) : 88;
+                maxY = 101;
+
+                referenceLines = [
+                    { value: 95, label: "95% (Clinical Target)", color: "#10b981", dash: "4,4" },
+                    { value: 90, label: "90% (Hypoxia Alert)", color: "#dc2626", dash: "5,4" }
+                ];
+
+                shadedZones = [
+                    { yMin: 95, yMax: 100, color: "rgba(6, 182, 212, 0.08)" }
+                ];
+            } else if (activeMetric === "temp") {
+                const vals = records.map(function (r) { return r.temperature; });
+                minY = vals.length ? Math.max(34.0, Number((Math.min(...vals, 35.8) - 0.5).toFixed(1))) : 35.0;
+                maxY = vals.length ? Math.min(42.0, Number((Math.max(...vals, 38.0) + 0.5).toFixed(1))) : 39.5;
+
+                referenceLines = [
+                    { value: 37.5, label: "37.5°C (Fever Alert)", color: "#dc2626", dash: "5,4" },
+                    { value: 36.0, label: "36.0°C (Baseline)", color: "#0284c7", dash: "4,4" }
+                ];
+
+                shadedZones = [
+                    { yMin: 36.0, yMax: 37.5, color: "rgba(245, 158, 11, 0.08)" }
+                ];
+            } else { // bmi
+                const vals = records.map(function (r) { return r.bmi; });
+                minY = vals.length ? Math.max(12, Math.floor(Math.min(...vals, 17) - 2)) : 15;
+                maxY = vals.length ? Math.min(50, Math.ceil(Math.max(...vals, 32) + 2)) : 35;
+
+                referenceLines = [
+                    { value: 18.5, label: "18.5 (Underweight)", color: "#f59e0b", dash: "4,4" },
+                    { value: 25.0, label: "25.0 (Overweight)", color: "#f97316", dash: "4,4" },
+                    { value: 30.0, label: "30.0 (Obese)", color: "#dc2626", dash: "5,4" }
+                ];
+
+                shadedZones = [
+                    { yMin: 18.5, yMax: 24.9, color: "rgba(16, 185, 129, 0.08)" }
+                ];
+            }
+
+            function getX(index) {
+                if (records.length <= 1) return paddingLeft + chartWidth / 2;
+                return paddingLeft + (index / (records.length - 1)) * chartWidth;
+            }
+
+            function getY(val) {
+                if (maxY <= minY) return paddingTop + chartHeight / 2;
+                const ratio = (val - minY) / (maxY - minY);
+                return paddingTop + chartHeight - ratio * chartHeight;
+            }
+
+            let svg = "";
+
+            // Defs for gradients & shadow filters
+            svg += `
+                <defs>
+                    <linearGradient id="sysGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#ef4444" stop-opacity="0.28" />
+                        <stop offset="100%" stop-color="#ef4444" stop-opacity="0.0" />
+                    </linearGradient>
+                    <linearGradient id="diaGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#0284c7" stop-opacity="0.22" />
+                        <stop offset="100%" stop-color="#0284c7" stop-opacity="0.0" />
+                    </linearGradient>
+                    <linearGradient id="primaryGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.25" />
+                        <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.0" />
+                    </linearGradient>
+                    <filter id="pointGlow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-opacity="0.25" />
+                    </filter>
+                </defs>
             `;
-        });
 
-        if (filteredRecords.length === 0) {
-            svgContent += `
-                <text
-                    x="${width / 2}"
-                    y="${height / 2}"
-                    class="bmi-empty-text"
-                    text-anchor="middle">
-                    No BMI records available for this period
-                </text>
+            // Draw shaded target zones
+            shadedZones.forEach(function (zone) {
+                const yTop = Math.max(paddingTop, getY(Math.min(zone.yMax, maxY)));
+                const yBottom = Math.min(height - paddingBottom, getY(Math.max(zone.yMin, minY)));
+                const zoneHeight = yBottom - yTop;
+                if (zoneHeight > 0) {
+                    svg += `<rect x="${paddingLeft}" y="${yTop}" width="${chartWidth}" height="${zoneHeight}" fill="${zone.color}" rx="4" />`;
+                }
+            });
+
+            // Grid lines and Y axis ticks
+            const ySteps = 5;
+            const stepVal = (maxY - minY) / ySteps;
+            for (let i = 0; i <= ySteps; i++) {
+                const val = activeMetric === "temp" ? (minY + stepVal * i).toFixed(1) : Math.round(minY + stepVal * i);
+                const y = getY(val);
+
+                svg += `
+                    <line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" stroke="#e5edfa" stroke-width="1" stroke-dasharray="3,3" />
+                    <text x="${paddingLeft - 12}" y="${y + 4}" fill="#718096" font-size="11" font-weight="500" text-anchor="end">${val}</text>
+                `;
+            }
+
+            // Reference threshold lines
+            referenceLines.forEach(function (ref) {
+                if (ref.value >= minY && ref.value <= maxY) {
+                    const y = getY(ref.value);
+                    svg += `
+                        <line x1="${paddingLeft}" y1="${y}" x2="${width - paddingRight}" y2="${y}" stroke="${ref.color}" stroke-width="1.4" stroke-dasharray="${ref.dash}" />
+                        <text x="${width - paddingRight - 6}" y="${y - 5}" fill="${ref.color}" font-size="10" font-weight="600" text-anchor="end">${ref.label}</text>
+                    `;
+                }
+            });
+
+            // Main X & Y axes
+            svg += `
+                <line x1="${paddingLeft}" y1="${paddingTop}" x2="${paddingLeft}" y2="${height - paddingBottom}" stroke="#cbd5e1" stroke-width="1.5" />
+                <line x1="${paddingLeft}" y1="${height - paddingBottom}" x2="${width - paddingRight}" y2="${height - paddingBottom}" stroke="#cbd5e1" stroke-width="1.5" />
             `;
-        }
 
-        chartSvg.innerHTML = svgContent;
+            // X axis labels
+            records.forEach(function (r, idx) {
+                const x = getX(idx);
+                const rangeVal = chartRange ? chartRange.value : "all";
+                let xLabel = formatShortDate(r.date);
 
-        const rangeText = chartRange.options[chartRange.selectedIndex].text;
+                if (rangeVal === "daily") {
+                    xLabel = r.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                }
 
-        if (chartNote) {
-            if (filteredRecords.length === 0) {
-                chartNote.textContent = `${rangeText}: No BMI records available.`;
-            } else if (filteredRecords.length === 1) {
-                chartNote.textContent = `${rangeText}: 1 BMI record shown. Add more records to form a trend line.`;
+                const showLabel =
+                    records.length <= 10 ||
+                    idx === 0 ||
+                    idx === records.length - 1 ||
+                    idx % Math.ceil(records.length / 7) === 0;
+
+                if (showLabel) {
+                    svg += `
+                        <line x1="${x}" y1="${height - paddingBottom}" x2="${x}" y2="${height - paddingBottom + 5}" stroke="#94a3b8" stroke-width="1" />
+                        <text x="${x}" y="${height - paddingBottom + 20}" fill="#64748b" font-size="10.5" font-weight="500" text-anchor="middle">${xLabel}</text>
+                    `;
+                }
+            });
+
+            // Draw line plots
+            if (activeMetric === "bp") {
+                // Dual lines: Systolic (red/coral) & Diastolic (blue)
+                if (records.length > 1) {
+                    // Systolic Area fill
+                    let sysAreaPath = `M ${getX(0)} ${getY(records[0].systolic)}`;
+                    for (let i = 1; i < records.length; i++) {
+                        sysAreaPath += ` L ${getX(i)} ${getY(records[i].systolic)}`;
+                    }
+                    sysAreaPath += ` L ${getX(records.length - 1)} ${height - paddingBottom} L ${getX(0)} ${height - paddingBottom} Z`;
+                    svg += `<path d="${sysAreaPath}" fill="url(#sysGradient)" />`;
+
+                    // Diastolic Area fill
+                    let diaAreaPath = `M ${getX(0)} ${getY(records[0].diastolic)}`;
+                    for (let i = 1; i < records.length; i++) {
+                        diaAreaPath += ` L ${getX(i)} ${getY(records[i].diastolic)}`;
+                    }
+                    diaAreaPath += ` L ${getX(records.length - 1)} ${height - paddingBottom} L ${getX(0)} ${height - paddingBottom} Z`;
+                    svg += `<path d="${diaAreaPath}" fill="url(#diaGradient)" />`;
+
+                    // Systolic stroke line
+                    let sysLinePath = `M ${getX(0)} ${getY(records[0].systolic)}`;
+                    for (let i = 1; i < records.length; i++) {
+                        sysLinePath += ` L ${getX(i)} ${getY(records[i].systolic)}`;
+                    }
+                    svg += `<path d="${sysLinePath}" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+
+                    // Diastolic stroke line
+                    let diaLinePath = `M ${getX(0)} ${getY(records[0].diastolic)}`;
+                    for (let i = 1; i < records.length; i++) {
+                        diaLinePath += ` L ${getX(i)} ${getY(records[i].diastolic)}`;
+                    }
+                    svg += `<path d="${diaLinePath}" fill="none" stroke="#0284c7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+                }
+
+                // Points & interactivity
+                records.forEach(function (r, idx) {
+                    const x = getX(idx);
+                    const ySys = getY(r.systolic);
+                    const yDia = getY(r.diastolic);
+
+                    // Systolic point
+                    svg += `
+                        <circle cx="${x}" cy="${ySys}" r="5.2" fill="#ef4444" stroke="#ffffff" stroke-width="2" class="vitals-chart-point" filter="url(#pointGlow)"
+                            data-patient="${escapeHtml(r.patientName)}"
+                            data-date="${escapeHtml(formatDateTime(r.date))}"
+                            data-value="Systolic: ${r.systolic} mmHg | Diastolic: ${r.diastolic} mmHg (BP: ${r.bpStr})"
+                            data-cat="${escapeHtml(r.bpCategory)}">
+                            <title>${r.patientName} (${formatDateTime(r.date)}): BP ${r.bpStr} mmHg [${r.bpCategory}]</title>
+                        </circle>
+                    `;
+
+                    // Diastolic point
+                    svg += `
+                        <circle cx="${x}" cy="${yDia}" r="5.2" fill="#0284c7" stroke="#ffffff" stroke-width="2" class="vitals-chart-point" filter="url(#pointGlow)"
+                            data-patient="${escapeHtml(r.patientName)}"
+                            data-date="${escapeHtml(formatDateTime(r.date))}"
+                            data-value="Diastolic: ${r.diastolic} mmHg (BP: ${r.bpStr})"
+                            data-cat="${escapeHtml(r.bpCategory)}">
+                            <title>${r.patientName} (${formatDateTime(r.date)}): BP ${r.bpStr} mmHg [${r.bpCategory}]</title>
+                        </circle>
+                    `;
+
+                    // Value label on hover or if sparse
+                    if (records.length <= 12) {
+                        svg += `<text x="${x}" y="${ySys - 9}" fill="#b91c1c" font-size="9.5" font-weight="700" text-anchor="middle">${r.systolic}</text>`;
+                        svg += `<text x="${x}" y="${yDia + 16}" fill="#0369a1" font-size="9.5" font-weight="700" text-anchor="middle">${r.diastolic}</text>`;
+                    }
+                });
             } else {
-                chartNote.textContent = `${rangeText}: ${filteredRecords.length} BMI records shown with category-based color coding.`;
+                // Single line metrics: hr, spo2, temp, bmi, weight
+                let lineColor = "#8b5cf6";
+                let unit = "BPM";
+                if (activeMetric === "spo2") { lineColor = "#06b6d4"; unit = "%"; }
+                else if (activeMetric === "temp") { lineColor = "#f59e0b"; unit = "°C"; }
+                else if (activeMetric === "bmi") { lineColor = "#10b981"; unit = "kg/m²"; }
+                else if (activeMetric === "weight") { lineColor = "#3b82f6"; unit = "kg"; }
+
+                function getMetricVal(r) {
+                    if (activeMetric === "hr") return r.heartRate;
+                    if (activeMetric === "spo2") return r.oxygenSaturation;
+                    if (activeMetric === "temp") return r.temperature;
+                    if (activeMetric === "weight") return r.weight;
+                    return r.bmi;
+                }
+
+                function getMetricCategory(r) {
+                    if (activeMetric === "hr") return r.hrCategory;
+                    if (activeMetric === "spo2") return r.spo2Category;
+                    if (activeMetric === "temp") return r.tempCategory;
+                    if (activeMetric === "weight") return `${r.weight} kg`;
+                    return r.bmiCategory;
+                }
+
+                function getPointColor(val) {
+                    if (activeMetric === "bmi") {
+                        if (val < 18.5) return "#f59e0b";
+                        if (val < 25) return "#10b981";
+                        if (val < 30) return "#f97316";
+                        return "#dc2626";
+                    }
+                    if (activeMetric === "hr") {
+                        if (val > 100) return "#f59e0b";
+                        if (val < 60) return "#0284c7";
+                        return "#10b981";
+                    }
+                    if (activeMetric === "spo2") {
+                        return val >= 95 ? "#06b6d4" : "#dc2626";
+                    }
+                    if (activeMetric === "temp") {
+                        if (val > 37.5) return "#dc2626";
+                        if (val < 36.0) return "#0284c7";
+                        return "#10b981";
+                    }
+                    return lineColor;
+                }
+
+                if (records.length > 1) {
+                    let areaPath = `M ${getX(0)} ${getY(getMetricVal(records[0]))}`;
+                    for (let i = 1; i < records.length; i++) {
+                        areaPath += ` L ${getX(i)} ${getY(getMetricVal(records[i]))}`;
+                    }
+                    areaPath += ` L ${getX(records.length - 1)} ${height - paddingBottom} L ${getX(0)} ${height - paddingBottom} Z`;
+                    svg += `<path d="${areaPath}" fill="url(#primaryGradient)" />`;
+
+                    let linePath = `M ${getX(0)} ${getY(getMetricVal(records[0]))}`;
+                    for (let i = 1; i < records.length; i++) {
+                        linePath += ` L ${getX(i)} ${getY(getMetricVal(records[i]))}`;
+                    }
+                    svg += `<path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
+                }
+
+                records.forEach(function (r, idx) {
+                    const val = getMetricVal(r);
+                    const x = getX(idx);
+                    const y = getY(val);
+                    const pointColor = getPointColor(val);
+                    const catLabel = getMetricCategory(r);
+
+                    svg += `
+                        <circle cx="${x}" cy="${y}" r="5.2" fill="${pointColor}" stroke="#ffffff" stroke-width="2" class="vitals-chart-point" filter="url(#pointGlow)"
+                            data-patient="${escapeHtml(r.patientName)}"
+                            data-date="${escapeHtml(formatDateTime(r.date))}"
+                            data-value="${val} ${unit}"
+                            data-cat="${escapeHtml(catLabel)}">
+                            <title>${r.patientName} (${formatDateTime(r.date)}): ${val} ${unit} [${catLabel}]</title>
+                        </circle>
+                    `;
+
+                    if (records.length <= 16) {
+                        svg += `<text x="${x}" y="${y - 9}" fill="#334155" font-size="9.5" font-weight="700" text-anchor="middle">${val}</text>`;
+                    }
+                });
+            }
+
+            // Empty state notice
+            if (records.length === 0) {
+                svg += `
+                    <text x="${width / 2}" y="${height / 2}" fill="#64748b" font-size="14" font-weight="500" text-anchor="middle">
+                        No health records available for the selected filters.
+                    </text>
+                `;
+            }
+
+            chartSvg.innerHTML = svg;
+
+            // Wire up interactive floating tooltip
+            wirePointTooltips(chartSvg);
+
+            // Update description note
+            if (chartNote) {
+                const metricNames = {
+                    bp: "Blood Pressure (Systolic & Diastolic)",
+                    hr: "Heart Rate / Resting Pulse",
+                    spo2: "Oxygen Saturation (SpO2)",
+                    temp: "Body Temperature",
+                    bmi: "Body Mass Index (BMI)",
+                    weight: "Body Weight"
+                };
+                const mName = metricNames[activeMetric] || activeMetric.toUpperCase();
+                const rangeName = chartRange ? chartRange.options[chartRange.selectedIndex].text : "All Time";
+                chartNote.textContent = `${rangeName}: Showing ${records.length} records for ${mName}.`;
             }
         }
-    }
 
-    function toggleCustomRange() {
-        if (!customRangeBox) {
-            return;
+        function escapeHtml(str) {
+            if (!str) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
-        if (chartRange.value === "custom") {
-            customRangeBox.classList.remove("hidden");
-        } else {
-            customRangeBox.classList.add("hidden");
-        }
-    }
+        function wirePointTooltips(svgEl) {
+            const points = svgEl.querySelectorAll(".vitals-chart-point");
+            points.forEach(function (pt) {
+                pt.addEventListener("mouseenter", function (e) {
+                    const patient = pt.getAttribute("data-patient");
+                    const date = pt.getAttribute("data-date");
+                    const value = pt.getAttribute("data-value");
+                    const cat = pt.getAttribute("data-cat");
 
-    chartRange.addEventListener("change", function () {
+                    chartTooltip.innerHTML = `
+                        <div class="vtooltip-header">
+                            <strong>${patient}</strong>
+                            <span>${date}</span>
+                        </div>
+                        <div class="vtooltip-value">${value}</div>
+                        ${cat ? `<div class="vtooltip-badge">${cat}</div>` : ""}
+                    `;
+
+                    chartTooltip.style.display = "block";
+                    positionTooltip(e);
+                });
+
+                pt.addEventListener("mousemove", function (e) {
+                    positionTooltip(e);
+                });
+
+                pt.addEventListener("mouseleave", function () {
+                    chartTooltip.style.display = "none";
+                });
+            });
+        }
+
+        function positionTooltip(e) {
+            const tooltipWidth = chartTooltip.offsetWidth || 180;
+            const tooltipHeight = chartTooltip.offsetHeight || 70;
+            let left = e.pageX + 14;
+            let top = e.pageY - tooltipHeight - 10;
+
+            if (left + tooltipWidth > window.innerWidth - 10) {
+                left = e.pageX - tooltipWidth - 14;
+            }
+            if (top < 10) {
+                top = e.pageY + 14;
+            }
+
+            chartTooltip.style.left = left + "px";
+            chartTooltip.style.top = top + "px";
+        }
+
+        // Toggle custom date range inputs visibility
+        function toggleCustomRange() {
+            if (!customRangeBox) return;
+            if (chartRange && chartRange.value === "custom") {
+                customRangeBox.classList.remove("hidden");
+                customRangeBox.style.display = "flex";
+            } else {
+                customRangeBox.classList.add("hidden");
+                customRangeBox.style.display = "none";
+            }
+        }
+
+        // Event Listeners for metric tabs
+        metricTabs.forEach(function (tab) {
+            tab.addEventListener("click", function () {
+                metricTabs.forEach(function (t) { t.classList.remove("active"); });
+                tab.classList.add("active");
+                activeMetric = tab.getAttribute("data-metric");
+                if (metricSelect) metricSelect.value = activeMetric;
+                renderChart();
+            });
+        });
+
+        if (metricSelect) {
+            metricSelect.addEventListener("change", function () {
+                activeMetric = metricSelect.value;
+                metricTabs.forEach(function (tab) {
+                    if (tab.getAttribute("data-metric") === activeMetric) {
+                        tab.classList.add("active");
+                    } else {
+                        tab.classList.remove("active");
+                    }
+                });
+                renderChart();
+            });
+        }
+
+        if (chartRange) {
+            chartRange.addEventListener("change", function () {
+                toggleCustomRange();
+                renderChart();
+            });
+        }
+
+        if (patientFilter) {
+            patientFilter.addEventListener("change", renderChart);
+        }
+
+        if (startDateInput) {
+            startDateInput.addEventListener("change", renderChart);
+        }
+
+        if (endDateInput) {
+            endDateInput.addEventListener("change", renderChart);
+        }
+
         toggleCustomRange();
-        renderBmiTrendChart();
-    });
+        renderChart();
 
-    if (startDateInput) {
-        startDateInput.addEventListener("change", renderBmiTrendChart);
+        // Listen for live refresh updates
+        container.addEventListener("recordsUpdated", function () {
+            renderChart();
+        });
     }
-
-    if (endDateInput) {
-        endDateInput.addEventListener("change", renderBmiTrendChart);
-    }
-
-    toggleCustomRange();
-    renderBmiTrendChart();
 });

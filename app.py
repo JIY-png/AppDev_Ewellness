@@ -756,6 +756,361 @@ def bmi_chart_records():
     ]
 
 
+def all_vitals_chart_records(records_list=None):
+    if records_list is None:
+        records_list = get_records()
+
+    chart_data = []
+    for record in records_list:
+        # Blood pressure parse
+        bp_val = str(record.get("G") or record.get("blood_pressure") or "").strip()
+        systolic = 0
+        diastolic = 0
+        if "/" in bp_val:
+            parts = bp_val.split("/")
+            try:
+                systolic = int(parts[0].strip())
+                diastolic = int(parts[1].strip())
+            except:
+                systolic = 0
+                diastolic = 0
+
+        # BP Category
+        if systolic >= 140 or diastolic >= 90:
+            bp_cat = "High BP (Stage 2)"
+        elif systolic >= 130 or diastolic >= 80:
+            bp_cat = "Stage 1 Elevated"
+        elif (systolic < 90 and systolic > 0) or (diastolic < 60 and diastolic > 0):
+            bp_cat = "Low BP"
+        elif systolic > 0 and diastolic > 0:
+            bp_cat = "Optimal"
+        else:
+            bp_cat = "Unrecorded"
+
+        # Heart rate
+        try:
+            hr = int(record.get("H") or record.get("heart_rate") or 0)
+        except:
+            hr = 0
+
+        if hr > 100:
+            hr_cat = "Tachycardia (>100 bpm)"
+        elif hr < 60 and hr > 0:
+            hr_cat = "Bradycardia (<60 bpm)"
+        elif hr >= 60:
+            hr_cat = "Normal (60-100 bpm)"
+        else:
+            hr_cat = "Unrecorded"
+
+        # SpO2
+        try:
+            spo2 = int(record.get("I") or record.get("oxygen_saturation") or 0)
+        except:
+            spo2 = 0
+
+        if spo2 >= 95:
+            spo2_cat = "Normal (≥95%)"
+        elif spo2 > 0:
+            spo2_cat = "Low (<95% Hypoxia Risk)"
+        else:
+            spo2_cat = "Unrecorded"
+
+        # Body Temperature
+        try:
+            temp = float(record.get("J") or record.get("temperature") or 0.0)
+        except:
+            temp = 0.0
+
+        if temp > 37.5:
+            temp_cat = "Elevated / Fever (>37.5°C)"
+        elif temp < 36.0 and temp > 0:
+            temp_cat = "Below Normal (<36.0°C)"
+        elif temp >= 36.0:
+            temp_cat = "Normal (36.0-37.5°C)"
+        else:
+            temp_cat = "Unrecorded"
+
+        # Weight & Height
+        try:
+            weight = float(record.get("K") or record.get("weight") or 0.0)
+        except:
+            weight = 0.0
+
+        try:
+            height = float(record.get("L") or record.get("height") or 0.0)
+        except:
+            height = 0.0
+
+        # BMI
+        try:
+            bmi = float(record.get("M") or record.get("bmi") or 0.0)
+        except:
+            bmi = 0.0
+
+        if bmi == 0.0 and height > 0 and weight > 0:
+            bmi = calculate_bmi(height, weight)
+
+        patient_name = f"{record.get('C', '')} {record.get('D', '')}".strip()
+        if not patient_name:
+            patient_name = record.get("patient_name") or f"Patient #{record.get('patient_id', '')}"
+
+        created_at_str = str(record.get("created_at") or "").strip()
+        if not created_at_str:
+            created_at_str = f"{record.get('A', '')} {record.get('B', '')}".strip()
+
+        chart_data.append({
+            "id": record.get("id"),
+            "patient_id": record.get("patient_id"),
+            "patient_name": patient_name,
+            "created_at": created_at_str,
+            "systolic": systolic,
+            "diastolic": diastolic,
+            "bp_str": f"{systolic}/{diastolic}" if systolic and diastolic else bp_val,
+            "bp_category": bp_cat,
+            "heart_rate": hr,
+            "hr_category": hr_cat,
+            "oxygen_saturation": spo2,
+            "spo2_category": spo2_cat,
+            "temperature": round(temp, 1),
+            "temp_category": temp_cat,
+            "weight": round(weight, 1),
+            "height": round(height, 1),
+            "bmi": round(bmi, 1),
+            "bmi_category": record.get("bmi_category") or get_bmi_category(bmi),
+            "status": record.get("status", "Normal"),
+            "remarks": record.get("remarks", "")
+        })
+
+    return chart_data
+
+
+def comprehensive_vitals_analytics(records_list=None):
+    if records_list is None:
+        records_list = get_records()
+
+    total = len(records_list)
+    if total == 0:
+        return {
+            "total_records": 0,
+            "normal_count": 0,
+            "attention_count": 0,
+            "compliance_rate": 100,
+            "bp": {
+                "avg_sys": 0, "avg_dia": 0, "bp_str": "—",
+                "min_sys": 0, "max_sys": 0, "min_dia": 0, "max_dia": 0,
+                "optimal": 0, "optimal_pct": 0, "elevated": 0, "elevated_pct": 0,
+                "stage2": 0, "stage2_pct": 0, "low": 0, "low_pct": 0, "hypertensive_pct": 0
+            },
+            "hr": {
+                "avg": 0, "min": 0, "max": 0,
+                "normal": 0, "normal_pct": 0, "tachycardia": 0, "tachycardia_pct": 0,
+                "bradycardia": 0, "bradycardia_pct": 0, "flag_pct": 0
+            },
+            "spo2": {
+                "avg": 0.0, "min": 0, "max": 0,
+                "normal": 0, "normal_pct": 0, "low": 0, "risk_pct": 0
+            },
+            "temp": {
+                "avg": 0.0, "min": 0.0, "max": 0.0,
+                "normal": 0, "normal_pct": 0, "fever": 0, "fever_pct": 0, "low": 0, "low_pct": 0
+            },
+            "bmi": {
+                "avg_bmi": 0.0, "avg_weight": 0.0, "avg_height": 0.0,
+                "underweight": 0, "underweight_pct": 0,
+                "normal": 0, "normal_pct": 0,
+                "overweight": 0, "overweight_pct": 0,
+                "obese": 0, "obese_pct": 0
+            },
+            "vital_risk_radar": []
+        }
+
+    parsed = all_vitals_chart_records(records_list)
+
+    normal_cnt = len([r for r in parsed if r["status"] == "Normal"])
+    attention_cnt = total - normal_cnt
+    compliance_rate = round((normal_cnt / total) * 100, 1)
+
+    # Blood Pressure Analytics
+    sys_list = [r["systolic"] for r in parsed if r["systolic"] > 0]
+    dia_list = [r["diastolic"] for r in parsed if r["diastolic"] > 0]
+    avg_sys = round(sum(sys_list) / len(sys_list)) if sys_list else 0
+    avg_dia = round(sum(dia_list) / len(dia_list)) if dia_list else 0
+    min_sys = min(sys_list) if sys_list else 0
+    max_sys = max(sys_list) if sys_list else 0
+    min_dia = min(dia_list) if dia_list else 0
+    max_dia = max(dia_list) if dia_list else 0
+
+    bp_optimal = len([r for r in parsed if r["bp_category"] == "Optimal"])
+    bp_elevated = len([r for r in parsed if r["bp_category"] == "Stage 1 Elevated"])
+    bp_stage2 = len([r for r in parsed if r["bp_category"] == "High BP (Stage 2)"])
+    bp_low = len([r for r in parsed if r["bp_category"] == "Low BP"])
+    hypertensive_pct = round(((bp_elevated + bp_stage2) / total) * 100, 1)
+    optimal_pct = round((bp_optimal / total) * 100, 1)
+
+    # Heart Rate Analytics
+    hr_list = [r["heart_rate"] for r in parsed if r["heart_rate"] > 0]
+    avg_hr = round(sum(hr_list) / len(hr_list)) if hr_list else 0
+    min_hr = min(hr_list) if hr_list else 0
+    max_hr = max(hr_list) if hr_list else 0
+    hr_normal = len([r for r in parsed if "Normal" in r["hr_category"]])
+    hr_tachy = len([r for r in parsed if "Tachycardia" in r["hr_category"]])
+    hr_brady = len([r for r in parsed if "Bradycardia" in r["hr_category"]])
+    hr_normal_pct = round((hr_normal / total) * 100, 1)
+
+    # SpO2 Analytics
+    spo2_list = [r["oxygen_saturation"] for r in parsed if r["oxygen_saturation"] > 0]
+    avg_spo2 = round(sum(spo2_list) / len(spo2_list), 1) if spo2_list else 0.0
+    min_spo2 = min(spo2_list) if spo2_list else 0
+    max_spo2 = max(spo2_list) if spo2_list else 0
+    spo2_normal = len([r for r in parsed if "Normal" in r["spo2_category"]])
+    spo2_low = len([r for r in parsed if "Low" in r["spo2_category"]])
+    spo2_normal_pct = round((spo2_normal / total) * 100, 1)
+    spo2_risk_pct = round((spo2_low / total) * 100, 1)
+
+    # Temperature Analytics
+    temp_list = [r["temperature"] for r in parsed if r["temperature"] > 0]
+    avg_temp = round(sum(temp_list) / len(temp_list), 1) if temp_list else 0.0
+    min_temp = min(temp_list) if temp_list else 0.0
+    max_temp = max(temp_list) if temp_list else 0.0
+    temp_normal = len([r for r in parsed if "Normal" in r["temp_category"]])
+    temp_fever = len([r for r in parsed if "Elevated" in r["temp_category"]])
+    temp_low = len([r for r in parsed if "Below Normal" in r["temp_category"]])
+    temp_normal_pct = round((temp_normal / total) * 100, 1)
+    temp_fever_pct = round((temp_fever / total) * 100, 1)
+
+    # BMI & Weight Analytics
+    bmi_list = [r["bmi"] for r in parsed if r["bmi"] > 0]
+    weight_list = [r["weight"] for r in parsed if r["weight"] > 0]
+    height_list = [r["height"] for r in parsed if r["height"] > 0]
+    avg_bmi = round(sum(bmi_list) / len(bmi_list), 1) if bmi_list else 0.0
+    avg_weight = round(sum(weight_list) / len(weight_list), 1) if weight_list else 0.0
+    avg_height = round(sum(height_list) / len(height_list), 1) if height_list else 0.0
+    bmi_under = len([r for r in parsed if r["bmi_category"] == "Underweight"])
+    bmi_norm = len([r for r in parsed if r["bmi_category"] == "Normal"])
+    bmi_over = len([r for r in parsed if r["bmi_category"] == "Overweight"])
+    bmi_obese = len([r for r in parsed if r["bmi_category"] == "Obese"])
+    bmi_norm_pct = round((bmi_norm / total) * 100, 1)
+
+    vital_risk_radar = [
+        {
+            "metric": "Blood Pressure",
+            "icon": "🩺",
+            "normal_pct": optimal_pct,
+            "flag_pct": round(100 - optimal_pct, 1),
+            "flag_count": total - bp_optimal,
+            "average": f"{avg_sys}/{avg_dia} mmHg" if avg_sys else "—",
+            "status": "Optimal" if optimal_pct >= 70 else "Needs Monitoring"
+        },
+        {
+            "metric": "Heart Rate",
+            "icon": "❤️",
+            "normal_pct": hr_normal_pct,
+            "flag_pct": round(100 - hr_normal_pct, 1),
+            "flag_count": total - hr_normal,
+            "average": f"{avg_hr} BPM" if avg_hr else "—",
+            "status": "Optimal" if hr_normal_pct >= 75 else "Needs Monitoring"
+        },
+        {
+            "metric": "Oxygen Saturation",
+            "icon": "💧",
+            "normal_pct": spo2_normal_pct,
+            "flag_pct": spo2_risk_pct,
+            "flag_count": spo2_low,
+            "average": f"{avg_spo2}% SpO2" if avg_spo2 else "—",
+            "status": "Optimal" if spo2_normal_pct >= 90 else "Attention Required"
+        },
+        {
+            "metric": "Body Temperature",
+            "icon": "🌡️",
+            "normal_pct": temp_normal_pct,
+            "flag_pct": round(100 - temp_normal_pct, 1),
+            "flag_count": total - temp_normal,
+            "average": f"{avg_temp}°C" if avg_temp else "—",
+            "status": "Optimal" if temp_normal_pct >= 85 else "Fever Watch"
+        },
+        {
+            "metric": "Body Mass Index",
+            "icon": "⚖️",
+            "normal_pct": bmi_norm_pct,
+            "flag_pct": round(100 - bmi_norm_pct, 1),
+            "flag_count": total - bmi_norm,
+            "average": f"{avg_bmi} kg/m²" if avg_bmi else "—",
+            "status": "Healthy" if bmi_norm_pct >= 60 else "Dietary Review"
+        }
+    ]
+
+    return {
+        "total_records": total,
+        "normal_count": normal_cnt,
+        "attention_count": attention_cnt,
+        "compliance_rate": compliance_rate,
+        "bp": {
+            "avg_sys": avg_sys,
+            "avg_dia": avg_dia,
+            "bp_str": f"{avg_sys}/{avg_dia}" if avg_sys else "—",
+            "min_sys": min_sys,
+            "max_sys": max_sys,
+            "min_dia": min_dia,
+            "max_dia": max_dia,
+            "optimal": bp_optimal,
+            "optimal_pct": optimal_pct,
+            "elevated": bp_elevated,
+            "elevated_pct": round((bp_elevated / total) * 100, 1),
+            "stage2": bp_stage2,
+            "stage2_pct": round((bp_stage2 / total) * 100, 1),
+            "low": bp_low,
+            "low_pct": round((bp_low / total) * 100, 1),
+            "hypertensive_pct": hypertensive_pct
+        },
+        "hr": {
+            "avg": avg_hr,
+            "min": min_hr,
+            "max": max_hr,
+            "normal": hr_normal,
+            "normal_pct": hr_normal_pct,
+            "tachycardia": hr_tachy,
+            "tachycardia_pct": round((hr_tachy / total) * 100, 1),
+            "bradycardia": hr_brady,
+            "bradycardia_pct": round((hr_brady / total) * 100, 1),
+            "flag_pct": round(100 - hr_normal_pct, 1)
+        },
+        "spo2": {
+            "avg": avg_spo2,
+            "min": min_spo2,
+            "max": max_spo2,
+            "normal": spo2_normal,
+            "normal_pct": spo2_normal_pct,
+            "low": spo2_low,
+            "risk_pct": spo2_risk_pct
+        },
+        "temp": {
+            "avg": avg_temp,
+            "min": min_temp,
+            "max": max_temp,
+            "normal": temp_normal,
+            "normal_pct": temp_normal_pct,
+            "fever": temp_fever,
+            "fever_pct": temp_fever_pct,
+            "low": temp_low,
+            "low_pct": round((temp_low / total) * 100, 1)
+        },
+        "bmi": {
+            "avg_bmi": avg_bmi,
+            "avg_weight": avg_weight,
+            "avg_height": avg_height,
+            "underweight": bmi_under,
+            "underweight_pct": round((bmi_under / total) * 100, 1),
+            "normal": bmi_norm,
+            "normal_pct": bmi_norm_pct,
+            "overweight": bmi_over,
+            "overweight_pct": round((bmi_over / total) * 100, 1),
+            "obese": bmi_obese,
+            "obese_pct": round((bmi_obese / total) * 100, 1)
+        },
+        "vital_risk_radar": vital_risk_radar
+    }
+
+
 def status_trends():
     records_list = get_records()
     labels = ["Normal", "Needs Attention"]
@@ -1157,6 +1512,7 @@ def delete_user_page(admin_id):
 @login_required
 def dashboard():
     records_list = get_records()
+    patients_list = get_patients()
 
     # Get all records in reverse order (newest first)
     latest_records = list(reversed(records_list))
@@ -1169,7 +1525,10 @@ def dashboard():
         latest_records=latest_records,
         bmi_trends=bmi_trends(),
         status_trends=status_trends(),
-        bmi_chart_records=bmi_chart_records()
+        bmi_chart_records=bmi_chart_records(),
+        vitals_chart_records=all_vitals_chart_records(records_list),
+        analytics=comprehensive_vitals_analytics(records_list),
+        patients=patients_list
     )
 
 
@@ -1297,8 +1656,12 @@ def patient_record_history_page(patient_id):
         flash("Patient record not found.", "error")
         return redirect(url_for("ehr_records_page"))
 
-    patient_records = list(reversed(get_records_for_patient(patient_id)))
+    patient_records_raw = get_records_for_patient(patient_id)
+    patient_records = list(reversed(patient_records_raw))
     latest_record = patient_records[0] if patient_records else None
+
+    patient_chart_records = all_vitals_chart_records(patient_records_raw)
+    patient_analytics = comprehensive_vitals_analytics(patient_records_raw)
 
     add_access_log(
         user=get_current_admin_name(),
@@ -1312,7 +1675,9 @@ def patient_record_history_page(patient_id):
         active_page="ehr_records",
         patient=patient,
         records=patient_records,
-        latest_record=latest_record
+        latest_record=latest_record,
+        patient_chart_records=patient_chart_records,
+        patient_analytics=patient_analytics
     )
 
 
@@ -1598,6 +1963,7 @@ def add_health_record_page():
 @login_required
 def reports_page():
     records_list = get_records()
+    patients_list = get_patients()
     return render_template(
         "admin/reports.html",
         title="Reports and Analytics",
@@ -1606,6 +1972,9 @@ def reports_page():
         bmi_trends=bmi_trends(),
         status_trends=status_trends(),
         bmi_chart_records=bmi_chart_records(),
+        vitals_chart_records=all_vitals_chart_records(records_list),
+        analytics=comprehensive_vitals_analytics(records_list),
+        patients=patients_list,
         records=list(reversed(records_list))
     )
 
@@ -2090,11 +2459,24 @@ def import_kiosk_json(file):
 @app.route("/api/dashboard-data")
 @login_required
 def api_dashboard_data():
+    records_list = get_records()
     return jsonify({
         "stats": dashboard_stats(),
         "bmi_trends": bmi_trends(),
         "status_trends": status_trends(),
-        "bmi_chart_records": bmi_chart_records()
+        "bmi_chart_records": bmi_chart_records(),
+        "vitals_chart_records": all_vitals_chart_records(records_list),
+        "analytics": comprehensive_vitals_analytics(records_list)
+    })
+
+
+@app.route("/api/analytics-data")
+@login_required
+def api_analytics_data():
+    records_list = get_records()
+    return jsonify({
+        "analytics": comprehensive_vitals_analytics(records_list),
+        "records": all_vitals_chart_records(records_list)
     })
 
 

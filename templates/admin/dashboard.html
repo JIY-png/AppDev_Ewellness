@@ -29,61 +29,76 @@
 </div>
 
 <div class="overview-grid">
-    <section class="panel graph-panel bmi-visualization-panel">
-        <div class="panel-header bmi-chart-header">
+    <section class="panel graph-panel vitals-visualization-panel">
+        <div class="panel-header vitals-chart-header">
             <div>
-                <h3>BMI Trend Overview</h3>
-                <p>BMI trend line with category-based color coding.</p>
+                <h3>Vital Signs & Health Trends</h3>
+                <p>Interactive tracking across all vital readings with clinical thresholds</p>
             </div>
 
-            <div class="bmi-chart-controls">
-                <label for="bmiChartRange">View by</label>
-
-                <select id="bmiChartRange">
+            <div class="vitals-chart-controls">
+                <label for="dashboardChartRange">View by</label>
+                <select id="dashboardChartRange" class="vitals-chart-range">
+                    <option value="all" selected>All Time</option>
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
-                    <option value="monthly" selected>Monthly</option>
+                    <option value="monthly">Monthly</option>
                     <option value="yearly">Yearly</option>
                     <option value="custom">Custom Range</option>
                 </select>
             </div>
 
-            <div class="bmi-custom-range hidden" id="bmiCustomRange">
+            <div class="vitals-custom-range hidden" id="dashboardCustomRange" style="display: none;">
                 <div>
-                    <label for="bmiStartDate">From</label>
-                    <input type="date" id="bmiStartDate">
+                    <label for="dashboardStartDate">From</label>
+                    <input type="date" id="dashboardStartDate" class="vitals-start-date">
                 </div>
 
                 <div>
-                    <label for="bmiEndDate">To</label>
-                    <input type="date" id="bmiEndDate">
+                    <label for="dashboardEndDate">To</label>
+                    <input type="date" id="dashboardEndDate" class="vitals-end-date">
                 </div>
             </div>
         </div>
 
-        <div
-            class="bmi-line-chart"
-            id="bmiLineChart"
-            data-records='{{ bmi_chart_records | tojson }}'>
+        <!-- Metric Switcher Tabs -->
+        <div class="metric-switcher-bar dashboard-metric-bar">
+            <button type="button" class="metric-tab-btn active" data-metric="bp">
+                <span>🩺</span> BP
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="hr">
+                <span>❤️</span> Pulse
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="spo2">
+                <span>💧</span> SpO2
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="temp">
+                <span>🌡️</span> Temp
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="bmi">
+                <span>⚖️</span> BMI
+            </button>
+        </div>
 
-            <div class="bmi-line-chart-box">
+        <div
+            class="vitals-trend-chart-container"
+            id="dashboardVitalsChart"
+            data-default-metric="bp"
+            data-records='{{ vitals_chart_records | tojson }}'>
+
+            <div class="vitals-line-chart-box">
                 <svg
-                    id="bmiLineChartSvg"
-                    viewBox="0 0 720 320"
+                    id="dashboardVitalsChartSvg"
+                    viewBox="0 0 880 340"
                     preserveAspectRatio="none"
-                    aria-label="BMI trend line graph">
+                    aria-label="Vital signs trend line graph">
                 </svg>
             </div>
 
-            <div class="bmi-chart-legend">
-                <span><i class="bmi-below-normal"></i> Below Normal</span>
-                <span><i class="bmi-normal"></i> Normal</span>
-                <span><i class="bmi-overweight"></i> Overweight</span>
-                <span><i class="bmi-obese"></i> Obese</span>
-            </div>
+            <div class="vitals-chart-legend"></div>
 
-            <p class="bmi-chart-note" id="bmiLineChartNote">
-                Showing BMI trend from available health records.
+            <p class="vitals-chart-note" id="dashboardVitalsChartNote">
+                Showing Blood Pressure trend from available health records.
             </p>
         </div>
     </section>

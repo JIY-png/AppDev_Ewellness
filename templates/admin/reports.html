@@ -4,111 +4,357 @@
 <div class="reports-page">
 
     <div class="reports-top-actions">
+        <div class="reports-header-text">
+            <h2>Clinical Analytics & Vital Signs Reporting</h2>
+            <p>Comprehensive health trends, diagnostic distributions, and multi-metric patient records</p>
+        </div>
+
         <button type="button" class="print-report-btn" id="printReportBtn">
-            Print or Save PDF
+            🖨️ Print or Save PDF
         </button>
     </div>
 
-    <div class="reports-grid reports-reordered-grid">
-        <section class="panel reports-panel reports-health-summary-panel">
+    <!-- 1. Top Clinical Metric KPI Cards -->
+    <div class="analytics-kpi-grid">
+        <article class="analytics-kpi-card bp-kpi">
+            <div class="akpi-head">
+                <span class="akpi-icon">🩺</span>
+                <span class="akpi-title">Blood Pressure</span>
+            </div>
+            <div class="akpi-main">
+                <h3 class="akpi-value">{{ analytics.bp.bp_str }}</h3>
+                <span class="akpi-unit">mmHg (Avg)</span>
+            </div>
+            <div class="akpi-meta">
+                <span class="akpi-badge {% if analytics.bp.optimal_pct >= 70 %}badge-success{% else %}badge-warning{% endif %}">
+                    {{ analytics.bp.optimal_pct }}% Optimal
+                </span>
+                <span class="akpi-sub">Hypertensive: {{ analytics.bp.hypertensive_pct }}%</span>
+            </div>
+            <div class="akpi-range">
+                <span>Range: {{ analytics.bp.min_sys }}/{{ analytics.bp.min_dia }} – {{ analytics.bp.max_sys }}/{{ analytics.bp.max_dia }}</span>
+            </div>
+        </article>
+
+        <article class="analytics-kpi-card hr-kpi">
+            <div class="akpi-head">
+                <span class="akpi-icon">❤️</span>
+                <span class="akpi-title">Heart Rate (Pulse)</span>
+            </div>
+            <div class="akpi-main">
+                <h3 class="akpi-value">{{ analytics.hr.avg }}</h3>
+                <span class="akpi-unit">BPM (Avg)</span>
+            </div>
+            <div class="akpi-meta">
+                <span class="akpi-badge {% if analytics.hr.normal_pct >= 75 %}badge-success{% else %}badge-warning{% endif %}">
+                    {{ analytics.hr.normal_pct }}% Normal
+                </span>
+                <span class="akpi-sub">Tachycardia: {{ analytics.hr.tachycardia_pct }}%</span>
+            </div>
+            <div class="akpi-range">
+                <span>Range: {{ analytics.hr.min }} – {{ analytics.hr.max }} BPM</span>
+            </div>
+        </article>
+
+        <article class="analytics-kpi-card spo2-kpi">
+            <div class="akpi-head">
+                <span class="akpi-icon">💧</span>
+                <span class="akpi-title">Oxygen Saturation</span>
+            </div>
+            <div class="akpi-main">
+                <h3 class="akpi-value">{{ analytics.spo2.avg }}%</h3>
+                <span class="akpi-unit">SpO2 (Avg)</span>
+            </div>
+            <div class="akpi-meta">
+                <span class="akpi-badge {% if analytics.spo2.normal_pct >= 90 %}badge-success{% else %}badge-danger{% endif %}">
+                    {{ analytics.spo2.normal_pct }}% Normal
+                </span>
+                <span class="akpi-sub">Hypoxia Risk: {{ analytics.spo2.risk_pct }}%</span>
+            </div>
+            <div class="akpi-range">
+                <span>Min Recorded: {{ analytics.spo2.min }}% SpO2</span>
+            </div>
+        </article>
+
+        <article class="analytics-kpi-card temp-kpi">
+            <div class="akpi-head">
+                <span class="akpi-icon">🌡️</span>
+                <span class="akpi-title">Body Temperature</span>
+            </div>
+            <div class="akpi-main">
+                <h3 class="akpi-value">{{ analytics.temp.avg }}°C</h3>
+                <span class="akpi-unit">Resting (Avg)</span>
+            </div>
+            <div class="akpi-meta">
+                <span class="akpi-badge {% if analytics.temp.normal_pct >= 85 %}badge-success{% else %}badge-warning{% endif %}">
+                    {{ analytics.temp.normal_pct }}% Normal
+                </span>
+                <span class="akpi-sub">Fever Rate: {{ analytics.temp.fever_pct }}%</span>
+            </div>
+            <div class="akpi-range">
+                <span>Range: {{ analytics.temp.min }}°C – {{ analytics.temp.max }}°C</span>
+            </div>
+        </article>
+
+        <article class="analytics-kpi-card bmi-kpi">
+            <div class="akpi-head">
+                <span class="akpi-icon">⚖️</span>
+                <span class="akpi-title">BMI & Weight</span>
+            </div>
+            <div class="akpi-main">
+                <h3 class="akpi-value">{{ analytics.bmi.avg_bmi }}</h3>
+                <span class="akpi-unit">kg/m² (Avg)</span>
+            </div>
+            <div class="akpi-meta">
+                <span class="akpi-badge {% if analytics.bmi.normal_pct >= 60 %}badge-success{% else %}badge-warning{% endif %}">
+                    {{ analytics.bmi.normal_pct }}% Healthy Wt
+                </span>
+                <span class="akpi-sub">Avg Wt: {{ analytics.bmi.avg_weight }} kg</span>
+            </div>
+            <div class="akpi-range">
+                <span>Obesity: {{ analytics.bmi.obese_pct }}%</span>
+            </div>
+        </article>
+    </div>
+
+    <!-- 2. Interactive All-Vitals Longitudinal Trend Graph Hub -->
+    <section class="panel vitals-visualization-panel">
+        <div class="vitals-chart-header">
+            <div>
+                <h3>Vital Signs Trends & Longitudinal Chart</h3>
+                <p>Interactive tracking across all health readings with clinical thresholds and patient filtering</p>
+            </div>
+
+            <div class="vitals-chart-controls">
+                <div class="control-group">
+                    <label for="reportsPatientFilter">Patient</label>
+                    <select id="reportsPatientFilter" class="vitals-patient-filter">
+                        <option value="all">All Patients (Clinic Overview)</option>
+                        {% for patient in patients %}
+                        <option value="{{ patient.id }}">{{ patient.first_name }} {{ patient.last_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="reportsChartRange">View by</label>
+                    <select id="reportsChartRange" class="vitals-chart-range">
+                        <option value="all" selected>All Time</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                        <option value="custom">Custom Range</option>
+                    </select>
+                </div>
+
+                <div class="vitals-custom-range hidden" id="reportsCustomRange" style="display: none;">
+                    <div>
+                        <label for="reportsStartDate">From</label>
+                        <input type="date" id="reportsStartDate" class="vitals-start-date">
+                    </div>
+                    <div>
+                        <label for="reportsEndDate">To</label>
+                        <input type="date" id="reportsEndDate" class="vitals-end-date">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metric Switcher Tabs -->
+        <div class="metric-switcher-bar">
+            <button type="button" class="metric-tab-btn active" data-metric="bp">
+                <span>🩺</span> Blood Pressure (Dual)
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="hr">
+                <span>❤️</span> Heart Rate (BPM)
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="spo2">
+                <span>💧</span> Oxygen Saturation (SpO2)
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="temp">
+                <span>🌡️</span> Body Temperature (°C)
+            </button>
+            <button type="button" class="metric-tab-btn" data-metric="bmi">
+                <span>⚖️</span> BMI & Weight
+            </button>
+        </div>
+
+        <!-- Dynamic Quick Stats Strip for the active metric -->
+        <div class="vitals-stats-strip">
+            <div class="vstat-item">
+                <small>Average</small>
+                <strong data-stat="avg">{{ analytics.bp.bp_str }} mmHg</strong>
+            </div>
+            <div class="vstat-item">
+                <small>Target Range</small>
+                <strong data-stat="target-pct">{{ analytics.bp.optimal_pct }}% Optimal</strong>
+            </div>
+            <div class="vstat-item">
+                <small>Lowest</small>
+                <strong data-stat="min">{{ analytics.bp.min_sys }}/{{ analytics.bp.min_dia }}</strong>
+            </div>
+            <div class="vstat-item">
+                <small>Highest</small>
+                <strong data-stat="max">{{ analytics.bp.max_sys }}/{{ analytics.bp.max_dia }}</strong>
+            </div>
+            <div class="vstat-item">
+                <small>Records in View</small>
+                <strong data-stat="count">{{ vitals_chart_records|length }}</strong>
+            </div>
+        </div>
+
+        <!-- Chart Container -->
+        <div
+            class="vitals-trend-chart-container"
+            id="vitalsLineChart"
+            data-default-metric="bp"
+            data-records='{{ vitals_chart_records | tojson }}'>
+
+            <div class="vitals-line-chart-box">
+                <svg
+                    id="vitalsLineChartSvg"
+                    viewBox="0 0 880 340"
+                    preserveAspectRatio="none"
+                    aria-label="Vital signs trend line graph">
+                </svg>
+            </div>
+
+            <div class="vitals-chart-legend">
+                <!-- Dynamically populated by JS based on active metric -->
+            </div>
+
+            <p class="vitals-chart-note" id="vitalsLineChartNote">
+                Showing Blood Pressure (Systolic & Diastolic) trend from available health records.
+            </p>
+        </div>
+    </section>
+
+    <!-- 3. Risk & Distribution Matrix (2-column layout) -->
+    <div class="reports-distribution-grid">
+        <!-- Column 1: Overall Vital Signs Normalcy Radar -->
+        <section class="panel distribution-panel">
             <div class="reports-panel-header">
                 <div>
-                    <h3>Health Status Summary</h3>
-                    <p>Overview of normal and flagged health records</p>
+                    <h3>Vital Signs Clinical Compliance</h3>
+                    <p>Percentage of readings within standard healthy medical parameters</p>
                 </div>
             </div>
 
-            <div class="report-trend-list">
-                {% for item in status_trends %}
-                <div class="report-trend-item">
-                    <div class="report-trend-label">
-                        <span>{{ item.label }}</span>
-                        <strong>{{ item.count }}</strong>
+            <div class="vital-radar-list">
+                {% for item in analytics.vital_risk_radar %}
+                <div class="vital-radar-item">
+                    <div class="radar-label-row">
+                        <span class="radar-title">
+                            <span class="radar-icon">{{ item.icon }}</span> {{ item.metric }}
+                        </span>
+                        <div class="radar-values">
+                            <span class="radar-avg">{{ item.average }}</span>
+                            <strong class="radar-pct">{{ item.normal_pct }}% Normal</strong>
+                        </div>
                     </div>
-
-                    <div class="report-bar-bg">
-                        {% if item.label == "Normal" %}
-                        <div
-                            class="report-bar-fill"
-                            data-percentage="{{ item.percentage }}">
-                        </div>
-                        {% else %}
-                        <div
-                            class="report-bar-fill attention"
-                            data-percentage="{{ item.percentage }}">
-                        </div>
-                        {% endif %}
+                    <div class="radar-progress-bar">
+                        <div class="radar-fill" style="width: {{ item.normal_pct }}%;"></div>
+                    </div>
+                    <div class="radar-footer">
+                        <span class="radar-status-badge {% if 'Optimal' in item.status or 'Healthy' in item.status or 'Normal' in item.status %}badge-success{% else %}badge-warning{% endif %}">
+                            {{ item.status }}
+                        </span>
+                        <small class="radar-flagged">{{ item.flag_count }} flagged ({{ item.flag_pct }}%)</small>
                     </div>
                 </div>
                 {% endfor %}
             </div>
         </section>
 
-        <section class="panel reports-panel bmi-visualization-panel reports-bmi-trend-panel">
-            <div class="reports-panel-header bmi-chart-header">
+        <!-- Column 2: Health Category Diagnostic Breakdown -->
+        <section class="panel distribution-panel">
+            <div class="reports-panel-header">
                 <div>
-                    <h3>BMI Trend Overview</h3>
-                    <p>BMI trend line with category-based color coding.</p>
-                </div>
-
-                <div class="bmi-chart-controls">
-                    <label for="bmiChartRange">View by</label>
-
-                    <select id="bmiChartRange">
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly" selected>Monthly</option>
-                        <option value="yearly">Yearly</option>
-                        <option value="custom">Custom Range</option>
-                    </select>
-                </div>
-
-                <div class="bmi-custom-range hidden" id="bmiCustomRange">
-                    <div>
-                        <label for="bmiStartDate">From</label>
-                        <input type="date" id="bmiStartDate">
-                    </div>
-
-                    <div>
-                        <label for="bmiEndDate">To</label>
-                        <input type="date" id="bmiEndDate">
-                    </div>
+                    <h3>Diagnostic Category Breakdown</h3>
+                    <p>Detailed classification across Blood Pressure, Heart Rate, and BMI</p>
                 </div>
             </div>
 
-            <div
-                class="bmi-line-chart"
-                id="bmiLineChart"
-                data-records='{{ bmi_chart_records | tojson }}'>
-
-                <div class="bmi-line-chart-box">
-                    <svg
-                        id="bmiLineChartSvg"
-                        viewBox="0 0 720 320"
-                        preserveAspectRatio="none"
-                        aria-label="BMI trend line graph">
-                    </svg>
+            <div class="diagnostic-breakdown-groups">
+                <!-- BP Breakdown -->
+                <div class="diag-group">
+                    <h4>🩺 Blood Pressure Distribution</h4>
+                    <div class="diag-chips">
+                        <div class="diag-chip optimal">
+                            <span>Optimal (&lt;120/80)</span>
+                            <strong>{{ analytics.bp.optimal }} ({{ analytics.bp.optimal_pct }}%)</strong>
+                        </div>
+                        <div class="diag-chip elevated">
+                            <span>Stage 1 Elevated</span>
+                            <strong>{{ analytics.bp.elevated }} ({{ analytics.bp.elevated_pct }}%)</strong>
+                        </div>
+                        <div class="diag-chip stage2">
+                            <span>Stage 2 High BP</span>
+                            <strong>{{ analytics.bp.stage2 }} ({{ analytics.bp.stage2_pct }}%)</strong>
+                        </div>
+                        {% if analytics.bp.low > 0 %}
+                        <div class="diag-chip low">
+                            <span>Low BP (&lt;90/60)</span>
+                            <strong>{{ analytics.bp.low }} ({{ analytics.bp.low_pct }}%)</strong>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
 
-                <div class="bmi-chart-legend">
-                    <span><i class="bmi-below-normal"></i> Below Normal</span>
-                    <span><i class="bmi-normal"></i> Normal</span>
-                    <span><i class="bmi-overweight"></i> Overweight</span>
-                    <span><i class="bmi-obese"></i> Obese</span>
+                <!-- Heart Rate Breakdown -->
+                <div class="diag-group">
+                    <h4>❤️ Pulse & Heart Rate Distribution</h4>
+                    <div class="diag-chips">
+                        <div class="diag-chip optimal">
+                            <span>Normal (60–100 BPM)</span>
+                            <strong>{{ analytics.hr.normal }} ({{ analytics.hr.normal_pct }}%)</strong>
+                        </div>
+                        <div class="diag-chip stage2">
+                            <span>Tachycardia (&gt;100 BPM)</span>
+                            <strong>{{ analytics.hr.tachycardia }} ({{ analytics.hr.tachycardia_pct }}%)</strong>
+                        </div>
+                        {% if analytics.hr.bradycardia > 0 %}
+                        <div class="diag-chip elevated">
+                            <span>Bradycardia (&lt;60 BPM)</span>
+                            <strong>{{ analytics.hr.bradycardia }} ({{ analytics.hr.bradycardia_pct }}%)</strong>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
 
-                <p class="bmi-chart-note" id="bmiLineChartNote">
-                    Showing BMI trend from available health records.
-                </p>
+                <!-- BMI Breakdown -->
+                <div class="diag-group">
+                    <h4>⚖️ Body Mass Index Distribution</h4>
+                    <div class="diag-chips">
+                        <div class="diag-chip low">
+                            <span>Underweight</span>
+                            <strong>{{ analytics.bmi.underweight }} ({{ analytics.bmi.underweight_pct }}%)</strong>
+                        </div>
+                        <div class="diag-chip optimal">
+                            <span>Normal Weight</span>
+                            <strong>{{ analytics.bmi.normal }} ({{ analytics.bmi.normal_pct }}%)</strong>
+                        </div>
+                        <div class="diag-chip elevated">
+                            <span>Overweight</span>
+                            <strong>{{ analytics.bmi.overweight }} ({{ analytics.bmi.overweight_pct }}%)</strong>
+                        </div>
+                        <div class="diag-chip stage2">
+                            <span>Obese</span>
+                            <strong>{{ analytics.bmi.obese }} ({{ analytics.bmi.obese_pct }}%)</strong>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
     </div>
 
+    <!-- 4. Generated Health Report Table -->
     <section class="panel generated-report-card">
         <div class="generated-report-header">
             <div>
-                <h3>Generated Health Report</h3>
-                <p>Printable summary for healthcare personnel</p>
+                <h3>Generated Health Records Report</h3>
+                <p>Complete historical registry of vital measurements and clinical evaluations</p>
             </div>
         </div>
 
@@ -117,12 +363,12 @@
                 <thead>
                     <tr>
                         <th>Patient</th>
-                        <th>Date</th>
+                        <th>Date & Time</th>
                         <th>Temperature</th>
                         <th>Heart Rate</th>
                         <th>SpO2</th>
                         <th>Blood Pressure</th>
-                        <th>BMI</th>
+                        <th>BMI & Weight</th>
                         <th>Status</th>
                     </tr>
                 </thead>
@@ -138,7 +384,7 @@
                             {% set date_parts = record.created_at.split(" ", 1) %}
                             <div class="report-date-stack">
                                 <span>{{ date_parts[0] }}</span>
-                                <small>{{ date_parts[1] }}</small>
+                                <small>{{ date_parts[1] if date_parts|length > 1 else '' }}</small>
                             </div>
                         </td>
 
@@ -148,12 +394,12 @@
 
                         <td>{{ record.I }}%</td>
 
-                        <td>{{ record.G }}</td>
+                        <td><strong>{{ record.G }}</strong></td>
 
                         <td>
                             <div class="report-bmi-stack">
-                                <span>{{ record.M }}</span>
-                                <small>{{ record.bmi_category }}</small>
+                                <span>{{ record.M }} kg/m²</span>
+                                <small>{{ record.bmi_category }} ({{ record.K }} kg)</small>
                             </div>
                         </td>
 
@@ -185,12 +431,3 @@
 
 </div>
 {% endblock %}
-
-<style>
-.bmi-category {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.75rem;
-    color: #6b7280;
-}
-</style>
