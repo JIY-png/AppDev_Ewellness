@@ -3,29 +3,29 @@
 {% block content %}
 
 <div class="page-header">
-    <h1>Import Data from SD Card</h1>
-    <p>Upload CSV or JSON files from your kiosk SD card to import patient data and health records.</p>
+    <h1>Import Health Records</h1>
+    <p>Upload CSV or JSON files to import patient data and health records into the EHR system.</p>
 </div>
 
 <div class="import-container">
     <div class="import-section">
-        <h2>Import Kiosk Data (CSV)</h2>
-        <p>Upload a CSV file from your kiosk SD card containing health records with patient information.</p>
+        <h2>Import Health Records (CSV)</h2>
+        <p>Upload a CSV file containing health records with patient vital signs and information.</p>
 
         <form action="{{ url_for('import_kiosk_data') }}" method="POST" enctype="multipart/form-data" class="import-form">
             <div class="form-group">
-                <label for="kiosk_file">Select CSV File</label>
-                <input type="file" id="kiosk_file" name="file" accept=".csv" required>
+                <label for="import_file">Select CSV File</label>
+                <input type="file" id="import_file" name="file" accept=".csv" required>
                 <small>CSV format with headers: Date, Time, FirstName, LastName, Age, Gender, BloodPressure, HeartRate, OxygenSaturation, BodyTemp, Weight, Height, BMI</small>
             </div>
 
-            <button type="submit" class="btn btn-primary">Import Kiosk Data</button>
+            <button type="submit" class="btn btn-primary">Import Health Records</button>
         </form>
     </div>
 </div>
 
 <div class="import-help">
-    <h3>Kiosk CSV Format</h3>
+    <h3>Health Records CSV Format</h3>
     
     <h4>Standard Format (with Verbose Headers):</h4>
     <pre>Date,Time,FirstName,LastName,Age,Gender,BloodPressure,HeartRate,OxygenSaturation,BodyTemp,Weight,Height,BMI

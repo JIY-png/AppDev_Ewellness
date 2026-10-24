@@ -57,128 +57,120 @@ def get_patients():
     if supabase is None:
         return []
     try:
-        response = supabase.table('patient_records').select('*').execute()
-        patients = []
-        seen = set()
-        for r in response.data:
-            name = (r.get("first_name", "").lower(), r.get("last_name", "").lower())
-            if name not in seen:
-                seen.add(name)
-                patients.append({
-                    "id": r["id"],
-                    "first_name": r.get("first_name", ""),
-                    "last_name": r.get("last_name", ""),
-                    "gender": r.get("gender", ""),
-                    "birth_date": "1990-01-01",
-                    "contact_no": "",
-                    "barangay": "",
-                    "created_at": r.get("created_at")
-                })
-        return patients
+        response = supabase.table('patients').select('*').order('id', desc=False).execute()
+        return response.data or []
     except Exception as e:
         print(f"Error getting patients: {e}")
         return []
 
-_pending_patients = {}
-
 def get_patient_by_id(patient_id):
-    if patient_id in _pending_patients:
-        return _pending_patients[patient_id]
     if supabase is None:
         return None
     try:
-        response = supabase.table('patient_records').select('*').eq('id', patient_id).execute()
+        response = supabase.table('patients').select('*').eq('id', patient_id).execute()
         if response.data:
-            r = response.data[0]
-            return {
-                "id": r["id"],
-                "first_name": r.get("first_name", ""),
-                "last_name": r.get("last_name", ""),
-                "gender": r.get("gender", ""),
-                "birth_date": "1990-01-01",
-                "contact_no": "",
-                "barangay": "",
-                "created_at": r.get("created_at")
-            }
+            return response.data[0]
         return None
     except Exception as e:
         print(f"Error getting patient by id: {e}")
         return None
 
 def add_patient(patient_data):
-    pid = patient_data.get('id', 1)
-    _pending_patients[pid] = patient_data
-    return pid
+    if supabase is None:
+        return None
+    try:
+        clean_patient = {
+            "first_name": patient_data.get("first_name", "").strip(),
+            "last_name": patient_data.get("last_name", "").strip(),
+            "gender": patient_data.get("gender", "Not specified"),
+            "birth_date": patient_data.get("birth_date", "1990-01-01"),
+            "contact_no": patient_data.get("contact_no", ""),
+            "barangay": patient_data.get("barangay", "")
+        }
+        if "id" in patient_data and patient_data["id"]:
+            clean_patient["id"] = int(patient_data["id"])
+
+        response = supabase.table('patients').insert(clean_patient).execute()
+        if response.data:
+            return response.data[0]['id']
+        return clean_patient.get('id')
+    except Exception as e:
+        print(f"Error adding patient: {e}")
+        return None
 
 def update_patient(patient_id, patient_data):
-    return True
+    if supabase is None:
+        return False
+    try:
+        clean_data = {k: v for k, v in patient_data.items() if k != 'id'}
+        response = supabase.table('patients').update(clean_data).eq('id', patient_id).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        print(f"Error updating patient: {e}")
+        return False
 
 def delete_patient(patient_id):
-    return True
+    if supabase is None:
+        return False
+    try:
+        supabase.table('records').delete().eq('patient_id', patient_id).execute()
+        response = supabase.table('patients').delete().eq('id', patient_id).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        print(f"Error deleting patient: {e}")
+        return False
 
 def get_records():
     if supabase is None:
         return []
     try:
-        response = supabase.table('patient_records').select('*').execute()
-        records = []
-        for r in response.data:
-            d_str = r.get("created_at", "")[:10]
-            t_str = r.get("created_at", "")[11:16]
-            systolic = r.get("systolic", 0)
-            diastolic = r.get("diastolic", 0)
-            bp = f"{systolic}/{diastolic}"
-            bmi = r.get("bmi", 0)
-            bmi_cat = get_bmi_category(bmi)
-            status = get_detailed_status(r.get("temperature", 0), r.get("pulse", 0), r.get("spo2", 0), systolic, diastolic, bmi)
-            
-            records.append({
-                "id": r["id"],
-                "patient_id": r["id"],
-                "A": d_str, "B": t_str,
-                "C": r.get("first_name", ""), "D": r.get("last_name", ""),
-                "E": r.get("age", 0), "F": r.get("gender", ""),
-                "G": bp, "H": r.get("pulse", 0), "I": r.get("spo2", 0), "J": r.get("temperature", 0),
-                "K": r.get("weight", 0), "L": r.get("height", 0), "M": bmi,
-                "bmi_category": bmi_cat, "status": status, "remarks": "Mapped from patient_records",
-                "created_at": r.get("created_at")
-            })
-        return records
+        response = supabase.table('records').select('*').order('id', desc=False).execute()
+        return response.data or []
     except Exception as e:
         print(f"Error getting records: {e}")
         return []
 
 def get_records_for_patient(patient_id):
-    records = get_records()
-    return [r for r in records if r["patient_id"] == patient_id]
+    if supabase is None:
+        return []
+    try:
+        response = supabase.table('records').select('*').eq('patient_id', patient_id).order('id', desc=False).execute()
+        return response.data or []
+    except Exception as e:
+        print(f"Error getting records for patient: {e}")
+        return []
 
 def add_record(record_data):
     if supabase is None:
         return None
     try:
-        bp_parts = str(record_data.get("G", "0/0")).split("/")
-        systolic = int(bp_parts[0]) if len(bp_parts) > 0 else 0
-        diastolic = int(bp_parts[1]) if len(bp_parts) > 1 else 0
-
-        patient_record_data = {
-            "first_name": record_data.get("C", ""),
-            "last_name": record_data.get("D", ""),
-            "age": int(record_data.get("E", 0)),
-            "gender": record_data.get("F", ""),
-            "systolic": systolic,
-            "diastolic": diastolic,
-            "pulse": int(record_data.get("H", 0)),
-            "spo2": int(record_data.get("I", 0)),
-            "temperature": float(record_data.get("J", 0)),
-            "weight": float(record_data.get("K", 0)),
-            "height": float(record_data.get("L", 0)),
-            "bmi": float(record_data.get("M", 0)),
-            "is_printed": False
+        clean_record = {
+            "patient_id": int(record_data.get("patient_id", 1)),
+            "A": record_data.get("A", datetime.now().strftime("%Y-%m-%d")),
+            "B": record_data.get("B", datetime.now().strftime("%I:%M %p")),
+            "C": record_data.get("C", ""),
+            "D": record_data.get("D", ""),
+            "E": int(record_data.get("E", 0)),
+            "F": record_data.get("F", ""),
+            "G": str(record_data.get("G", "0/0")),
+            "H": int(record_data.get("H", 0)),
+            "I": int(record_data.get("I", 0)),
+            "J": float(record_data.get("J", 0.0)),
+            "K": float(record_data.get("K", 0.0)),
+            "L": float(record_data.get("L", 0.0)),
+            "M": float(record_data.get("M", 0.0)),
+            "bmi_category": record_data.get("bmi_category", "Normal"),
+            "status": record_data.get("status", "Normal"),
+            "remarks": record_data.get("remarks", ""),
+            "created_at": record_data.get("created_at", datetime.now().strftime("%Y-%m-%d %I:%M %p"))
         }
-        response = supabase.table('patient_records').insert(patient_record_data).execute()
+        if "id" in record_data and record_data["id"]:
+            clean_record["id"] = int(record_data["id"])
+
+        response = supabase.table('records').insert(clean_record).execute()
         if response.data:
             return response.data[0]['id']
-        return None
+        return clean_record.get('id')
     except Exception as e:
         print(f"Error adding record: {e}")
         return None
@@ -907,576 +899,6 @@ def delete_user_page(admin_id):
     return redirect(url_for("users_page"))
 
 
-# --------------------------------------------------
-# KIOSK ROUTES
-# Patient-facing pages do not require admin login.
-# --------------------------------------------------
-
-@app.route("/kiosk")
-def kiosk_welcome_page():
-    return render_template(
-        "kiosk/kiosk_welcome.html",
-        title="Health Monitoring Kiosk"
-    )
-
-
-@app.route("/kiosk/checkin", methods=["GET", "POST"])
-def kiosk_checkin_page():
-    if request.method == "POST":
-        session["kiosk_patient"] = {
-            "first_name": request.form.get("first_name", "").strip(),
-            "last_name": request.form.get("last_name", "").strip(),
-            "birth_date": request.form.get("birth_date", "").strip(),
-            "contact_no": request.form.get("contact_no", "").strip(),
-            "barangay": request.form.get("barangay", "").strip()
-        }
-
-        session["kiosk_results"] = {}
-
-        return redirect(url_for("kiosk_assessment_page"))
-
-    return render_template(
-        "kiosk/kiosk_checkin.html",
-        title="Patient Check-in"
-    )
-
-
-@app.route("/kiosk/assessment")
-def kiosk_assessment_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    return render_template(
-        "kiosk/kiosk_assessment.html",
-        title="Health Assessment",
-        patient=kiosk_patient
-    )
-
-
-@app.route("/kiosk/measure/temperature")
-def kiosk_temperature_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-    saved_temperature = kiosk_results.get("temperature")
-
-    return render_template(
-        "kiosk/kiosk_temperature.html",
-        title="Temperature Measurement",
-        patient=kiosk_patient,
-        saved_temperature=saved_temperature
-    )
-
-
-@app.route("/kiosk/measure/temperature/save", methods=["POST"])
-def kiosk_temperature_save_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    temperature_value = request.form.get("temperature_value", "").strip()
-
-    if not temperature_value:
-        return redirect(url_for("kiosk_temperature_page"))
-
-    try:
-        temperature_value = float(temperature_value)
-    except ValueError:
-        return redirect(url_for("kiosk_temperature_page"))
-
-    if temperature_value < 36.0:
-        temperature_status = "LOW TEMPERATURE"
-    elif temperature_value <= 37.5:
-        temperature_status = "NORMAL TEMPERATURE"
-    else:
-        temperature_status = "HIGH TEMPERATURE"
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    kiosk_results["temperature"] = {
-        "value": temperature_value,
-        "unit": "°C",
-        "status": temperature_status
-    }
-
-    session["kiosk_results"] = kiosk_results
-    session.modified = True
-
-    return redirect(url_for("kiosk_assessment_page"))
-
-
-@app.route("/kiosk/measure/blood-pressure")
-def kiosk_blood_pressure_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-    saved_blood_pressure = kiosk_results.get("blood_pressure")
-
-    retry = request.args.get("retry") == "1"
-
-    if retry:
-        saved_blood_pressure = None
-
-    return render_template(
-        "kiosk/kiosk_blood_pressure.html",
-        title="Blood Pressure Measurement",
-        patient=kiosk_patient,
-        saved_blood_pressure=saved_blood_pressure
-    )
-
-
-@app.route("/kiosk/measure/blood-pressure/save", methods=["POST"])
-def kiosk_blood_pressure_save_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    systolic_value = request.form.get("systolic_value", "").strip()
-    diastolic_value = request.form.get("diastolic_value", "").strip()
-    pulse_value = request.form.get("pulse_value", "").strip()
-
-    if not systolic_value or not diastolic_value or not pulse_value:
-        return redirect(url_for("kiosk_blood_pressure_page"))
-
-    try:
-        systolic_value = int(systolic_value)
-        diastolic_value = int(diastolic_value)
-        pulse_value = int(pulse_value)
-    except ValueError:
-        return redirect(url_for("kiosk_blood_pressure_page"))
-
-    if systolic_value < 90 or diastolic_value < 60:
-        bp_status = "LOW BLOOD PRESSURE"
-    elif systolic_value >= 140 or diastolic_value >= 90:
-        bp_status = "HIGH BLOOD PRESSURE"
-    else:
-        bp_status = "NORMAL BLOOD PRESSURE"
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    kiosk_results["blood_pressure"] = {
-        "systolic": systolic_value,
-        "diastolic": diastolic_value,
-        "pulse": pulse_value,
-        "unit": "mmHg",
-        "status": bp_status
-    }
-
-    session["kiosk_results"] = kiosk_results
-    session.modified = True
-
-    return redirect(url_for("kiosk_assessment_page"))
-
-
-@app.route("/kiosk/measure/height")
-def kiosk_height_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-    saved_height = kiosk_results.get("height")
-
-    retry = request.args.get("retry") == "1"
-
-    if retry:
-        saved_height = None
-
-    return render_template(
-        "kiosk/kiosk_height.html",
-        title="Height Measurement",
-        patient=kiosk_patient,
-        saved_height=saved_height
-    )
-
-
-@app.route("/kiosk/measure/height/save", methods=["POST"])
-def kiosk_height_save_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    height_value = request.form.get("height_value", "").strip()
-
-    if not height_value:
-        return redirect(url_for("kiosk_height_page"))
-
-    try:
-        height_value = float(height_value)
-    except ValueError:
-        return redirect(url_for("kiosk_height_page"))
-
-    if height_value < 120:
-        height_status = "BELOW AVERAGE HEIGHT"
-    elif height_value <= 190:
-        height_status = "HEIGHT RECORDED"
-    else:
-        height_status = "ABOVE AVERAGE HEIGHT"
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    kiosk_results["height"] = {
-        "value": height_value,
-        "unit": "cm",
-        "status": height_status
-    }
-
-    session["kiosk_results"] = kiosk_results
-    session.modified = True
-
-    return redirect(url_for("kiosk_assessment_page"))
-
-
-@app.route("/kiosk/measure/weight")
-def kiosk_weight_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-    saved_weight = kiosk_results.get("weight")
-
-    retry = request.args.get("retry") == "1"
-
-    if retry:
-        saved_weight = None
-
-    return render_template(
-        "kiosk/kiosk_weight.html",
-        title="Weight Measurement",
-        patient=kiosk_patient,
-        saved_weight=saved_weight
-    )
-
-
-@app.route("/kiosk/measure/weight/save", methods=["POST"])
-def kiosk_weight_save_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    weight_value = request.form.get("weight_value", "").strip()
-
-    if not weight_value:
-        return redirect(url_for("kiosk_weight_page"))
-
-    try:
-        weight_value = float(weight_value)
-    except ValueError:
-        return redirect(url_for("kiosk_weight_page"))
-
-    if weight_value <= 0:
-        weight_status = "INVALID WEIGHT"
-    else:
-        weight_status = "WEIGHT RECORDED"
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    kiosk_results["weight"] = {
-        "value": weight_value,
-        "unit": "kg",
-        "status": weight_status
-    }
-
-    session["kiosk_results"] = kiosk_results
-    session.modified = True
-
-    return redirect(url_for("kiosk_assessment_page"))
-
-
-@app.route("/kiosk/measure/bmi")
-def kiosk_bmi_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    saved_height = kiosk_results.get("height")
-    saved_weight = kiosk_results.get("weight")
-    saved_bmi = kiosk_results.get("bmi")
-
-    calculated_bmi = None
-    bmi_category = None
-    bmi_status = None
-
-    if saved_height and saved_weight:
-        height_value = float(saved_height["value"])
-        weight_value = float(saved_weight["value"])
-
-        calculated_bmi = calculate_bmi(height_value, weight_value)
-        bmi_category = get_bmi_category(calculated_bmi)
-        bmi_status = bmi_category.upper() + " BMI"
-
-    return render_template(
-        "kiosk/kiosk_bmi.html",
-        title="BMI Calculation",
-        patient=kiosk_patient,
-        saved_height=saved_height,
-        saved_weight=saved_weight,
-        saved_bmi=saved_bmi,
-        calculated_bmi=calculated_bmi,
-        bmi_category=bmi_category,
-        bmi_status=bmi_status
-    )
-
-
-@app.route("/kiosk/measure/bmi/save", methods=["POST"])
-def kiosk_bmi_save_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    saved_height = kiosk_results.get("height")
-    saved_weight = kiosk_results.get("weight")
-
-    if not saved_height or not saved_weight:
-        return redirect(url_for("kiosk_bmi_page"))
-
-    height_value = float(saved_height["value"])
-    weight_value = float(saved_weight["value"])
-
-    bmi_value = calculate_bmi(height_value, weight_value)
-    bmi_category = get_bmi_category(bmi_value)
-
-    kiosk_results["bmi"] = {
-        "value": bmi_value,
-        "unit": "kg/m²",
-        "category": bmi_category,
-        "status": bmi_category.upper() + " BMI"
-    }
-
-    session["kiosk_results"] = kiosk_results
-    session.modified = True
-
-    return redirect(url_for("kiosk_assessment_page"))
-
-
-@app.route("/kiosk/measure/spo2")
-def kiosk_spo2_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-    saved_spo2 = kiosk_results.get("oxygen_saturation")
-
-    retry = request.args.get("retry") == "1"
-
-    if retry:
-        saved_spo2 = None
-
-    return render_template(
-        "kiosk/kiosk_spo2.html",
-        title="Oxygen Saturation Measurement",
-        patient=kiosk_patient,
-        saved_spo2=saved_spo2
-    )
-
-
-@app.route("/kiosk/measure/spo2/save", methods=["POST"])
-def kiosk_spo2_save_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    spo2_value = request.form.get("spo2_value", "").strip()
-
-    if not spo2_value:
-        return redirect(url_for("kiosk_spo2_page"))
-
-    try:
-        spo2_value = int(spo2_value)
-    except ValueError:
-        return redirect(url_for("kiosk_spo2_page"))
-
-    if spo2_value < 95:
-        spo2_status = "LOW OXYGEN SATURATION"
-    elif spo2_value <= 100:
-        spo2_status = "NORMAL OXYGEN SATURATION"
-    else:
-        spo2_status = "INVALID OXYGEN SATURATION"
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    kiosk_results["oxygen_saturation"] = {
-        "value": spo2_value,
-        "unit": "%",
-        "status": spo2_status
-    }
-
-    session["kiosk_results"] = kiosk_results
-    session.modified = True
-
-    return redirect(url_for("kiosk_assessment_page"))
-
-
-@app.route("/kiosk/summary")
-def kiosk_summary_page():
-    kiosk_patient = session.get("kiosk_patient")
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    kiosk_results = session.get("kiosk_results", {})
-
-    required_results = {
-        "temperature": "Body Temperature",
-        "blood_pressure": "Blood Pressure",
-        "oxygen_saturation": "Oxygen Saturation",
-        "height": "Height",
-        "weight": "Weight",
-        "bmi": "BMI"
-    }
-
-    missing_results = []
-
-    for key, label in required_results.items():
-        if key not in kiosk_results:
-            missing_results.append({
-                "key": key,
-                "label": label
-            })
-
-    is_complete = len(missing_results) == 0
-
-    overall_status = "Incomplete"
-
-    if is_complete:
-        abnormal_findings = []
-
-        temperature = kiosk_results["temperature"]["value"]
-        blood_pressure = kiosk_results["blood_pressure"]
-        oxygen_saturation = kiosk_results["oxygen_saturation"]["value"]
-        bmi_category = kiosk_results["bmi"]["category"]
-
-        if temperature < 36.0:
-            abnormal_findings.append("low body temperature")
-
-        if temperature > 37.5:
-            abnormal_findings.append("high body temperature")
-
-        if blood_pressure["systolic"] >= 140 or blood_pressure["diastolic"] >= 90:
-            abnormal_findings.append("high blood pressure")
-
-        if blood_pressure["systolic"] < 90 or blood_pressure["diastolic"] < 60:
-            abnormal_findings.append("low blood pressure")
-
-        if oxygen_saturation < 95:
-            abnormal_findings.append("low oxygen saturation")
-
-        if bmi_category in ["Underweight", "Overweight", "Obese"]:
-            abnormal_findings.append(bmi_category.lower() + " BMI")
-
-        if abnormal_findings:
-            overall_status = "Needs Attention"
-        else:
-            overall_status = "Normal"
-
-    return render_template(
-        "kiosk/kiosk_summary.html",
-        title="Summary Results",
-        patient=kiosk_patient,
-        results=kiosk_results,
-        missing_results=missing_results,
-        is_complete=is_complete,
-        overall_status=overall_status
-    )
-
-
-@app.route("/kiosk/summary/submit", methods=["POST"])
-def kiosk_summary_submit_page():
-    kiosk_patient = session.get("kiosk_patient")
-    kiosk_results = session.get("kiosk_results", {})
-
-    if not kiosk_patient:
-        return redirect(url_for("kiosk_checkin_page"))
-
-    required_keys = [
-        "temperature",
-        "blood_pressure",
-        "oxygen_saturation",
-        "height",
-        "weight",
-        "bmi"
-    ]
-
-    for key in required_keys:
-        if key not in kiosk_results:
-            return redirect(url_for("kiosk_summary_page"))
-
-    new_patient = {
-        "id": get_next_patient_id(),
-        "first_name": kiosk_patient.get("first_name", "").strip(),
-        "last_name": kiosk_patient.get("last_name", "").strip(),
-        "gender": kiosk_patient.get("gender", "Not specified"),
-        "birth_date": kiosk_patient.get("birth_date", "").strip(),
-        "contact_no": kiosk_patient.get("contact_no", "").strip(),
-        "barangay": kiosk_patient.get("barangay", "").strip()
-    }
-
-    add_patient(new_patient)
-
-    temperature = float(kiosk_results["temperature"]["value"])
-    blood_pressure = kiosk_results["blood_pressure"]
-    heart_rate = int(blood_pressure["pulse"])
-    oxygen_saturation = int(kiosk_results["oxygen_saturation"]["value"])
-    systolic = int(blood_pressure["systolic"])
-    diastolic = int(blood_pressure["diastolic"])
-    height = float(kiosk_results["height"]["value"])
-    weight = float(kiosk_results["weight"]["value"])
-
-    new_record = create_health_record(
-        patient_id=new_patient["id"],
-        temperature=temperature,
-        heart_rate=heart_rate,
-        oxygen_saturation=oxygen_saturation,
-        systolic=systolic,
-        diastolic=diastolic,
-        height=height,
-        weight=weight
-    )
-
-    add_access_log(
-        user="Kiosk Patient",
-        role="Patient Kiosk",
-        action=f'Submitted kiosk health assessment for {new_record["C"]} {new_record["D"]}'
-    )
-
-    session.pop("kiosk_patient", None)
-    session.pop("kiosk_results", None)
-    session.modified = True
-
-    return redirect(url_for("kiosk_complete_page"))
-
-
-@app.route("/kiosk/complete")
-def kiosk_complete_page():
-    return render_template(
-        "kiosk/kiosk_complete.html",
-        title="Assessment Complete"
-    )
-
 
 # --------------------------------------------------
 # PAGE ROUTES
@@ -1932,10 +1354,10 @@ def import_kiosk_data():
     try:
         if file.filename.endswith(".csv"):
             imported_count = import_kiosk_csv(file)
-            flash(f"Successfully imported {imported_count} kiosk records.", "success")
+            flash(f"Successfully imported {imported_count} health records.", "success")
         elif file.filename.endswith(".json"):
             imported_count = import_kiosk_json(file)
-            flash(f"Successfully imported {imported_count} kiosk records.", "success")
+            flash(f"Successfully imported {imported_count} health records.", "success")
         else:
             flash("Invalid file format. Please upload CSV or JSON.", "error")
             return redirect(url_for("import_data_page"))
@@ -1943,11 +1365,11 @@ def import_kiosk_data():
         add_access_log(
             user=get_current_admin_name(),
             role=get_current_admin_role(),
-            action=f"Imported {imported_count} kiosk records from {file.filename}"
+            action=f"Imported {imported_count} health records from {file.filename}"
         )
 
     except Exception as e:
-        flash(f"Error importing kiosk data: {str(e)}", "error")
+        flash(f"Error importing health records: {str(e)}", "error")
         return redirect(url_for("import_data_page"))
 
     return redirect(url_for("import_data_page"))

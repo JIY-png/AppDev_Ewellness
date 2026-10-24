@@ -12,36 +12,30 @@
 
 ## 📌 Overview
 
-**E-Wellness** is a dual-interface Health Monitoring and Electronic Health Record (EHR) web application developed as a Capstone project. The system bridges primary community healthcare and administrative clinic management by combining:
+**E-Wellness** is an Electronic Health Record (EHR) and Health Monitoring web application built for healthcare facilities and community health clinics. The system is centered around a comprehensive **Clinical EHR & Admin Dashboard (`/`)** that enables authorized healthcare staff and system administrators to:
 
-1. **Self-Service Patient Health Kiosk (`/kiosk`)**: A patient-friendly, step-by-step guided vital signs check-in station that records body temperature, blood pressure, pulse, height, weight, automated BMI calculation, and oxygen saturation (SpO2).
-2. **Clinical EHR & Admin Portal (`/`)**: A secure administrative system for healthcare workers to manage patient databases, monitor population health analytics, review longitudinal health histories, import offline kiosk SD card data, generate downloadable clinical PDF health reports, and audit system activities.
+- Manage patient databases and demographic records with instant searching and filtering.
+- Record and monitor vital signs (temperature, blood pressure, pulse, SpO2, height, weight, automated BMI).
+- Review longitudinal patient health histories and historical trends.
+- Generate and download dynamic clinical PDF health reports.
+- Batch import health records from CSV and JSON data files.
+- Administer authorized staff user accounts and role-based permissions.
+- Maintain immutable security and audit logs of all user actions.
 
 ---
 
 ## 🚀 Key Features
 
-### 🩺 1. Self-Service Health Kiosk Workflow
-- **Patient Check-in**: Streamlined demographic entry (Name, Birthdate, Contact Number, Barangay).
-- **Interactive Measurement Stations**:
-  - **Body Temperature**: Quick assessment with fever threshold alerts.
-  - **Blood Pressure & Heart Rate**: Systolic/diastolic entry, pulse rate tracking, and classification (Normal, Low, High BP).
-  - **Height & Weight**: Measurements recorded in centimeters and kilograms.
-  - **Automated BMI Calculation**: Immediate BMI index computation and classification (*Underweight*, *Normal*, *Overweight*, *Obese*).
-  - **Pulse Oximetry (SpO2)**: Oxygen saturation level capture with hypoxemia warnings (<95%).
-- **Automated Health Evaluation**: Evaluates patient vitals against clinical thresholds to flag records as **Normal** or **Needs Attention**.
-- **Assessment Review & Submission**: Patients review summary cards before committing data to the central database.
-
-### 📊 2. Clinical EHR & Admin Dashboard
+### 📊 Clinical EHR & Admin Dashboard
 - **Executive Health Metrics**: Real-time counters for total registered patients, total records logged, normal vs. attention-needed cases, average community BMI, and estimated documentation reduction.
 - **Visual Analytics**: Interactive BMI and health status trend distribution charts.
 - **Patient Management (`/patients`)**: Search, filter, and inspect patients by name, barangay, gender, or contact details; add patients manually with initial vitals.
 - **Longitudinal EHR Records (`/ehr-records`)**: Complete timeline of health assessments per patient with historical comparisons.
 - **Clinical PDF Report Generation**: On-demand downloadable PDF reports powered by ReportLab containing patient vitals, BMI evaluations, clinical remarks, and timestamped audit information.
-- **Offline Data Import (`/import`)**:
-  - Direct upload and parsing of kiosk SD card data in **CSV** or **JSON** format.
-  - Supports both descriptive headers (`Date`, `FirstName`, `BloodPressure`, etc.) and single-letter kiosk hardware codes (`A` through `M`).
-- **Role-Based Access Control (RBAC)**: Distinct permissions for **System Admin** and clinic staff.
+- **Health Data Batch Import (`/import`)**:
+  - Direct upload and parsing of health record batches in **CSV** or **JSON** format.
+  - Supports both descriptive headers (`Date`, `FirstName`, `BloodPressure`, etc.) and standard single-letter codes (`A` through `M`).
+- **Role-Based Access Control (RBAC)**: Distinct permissions for **System Admin**, **Health Personnel**, and **Records Staff**.
 - **Audit & Security Logging (`/security`)**: Immutable trail recording logins, account actions, data imports, and report downloads.
 
 ---
@@ -76,35 +70,22 @@ EWELLNESS.UI/
 │   └── E-Wellness logo.png     # Logo served statically
 ├── templates/                  # Jinja2 template hierarchy
 │   ├── layouts/
-│   │   ├── base.html           # Main administrative layout with sidebar & toasts
-│   │   └── kiosk_base.html     # Fullscreen patient kiosk layout
+│   │   └── base.html           # Main administrative layout with sidebar & toasts
 │   ├── auth/
 │   │   ├── login.html          # Admin authentication page
 │   │   └── signup.html         # User registration page
-│   ├── admin/
-│   │   ├── dashboard.html      # Main EHR analytics dashboard
-│   │   ├── patients.html       # Patient directory & search
-│   │   ├── add_patient.html    # Manual patient intake form
-│   │   ├── ehr_records.html    # Longitudinal health record lists
-│   │   ├── patient_record_history.html # Detailed single-patient record history
-│   │   ├── add_health_record.html      # Follow-up health record entry
-│   │   ├── reports.html        # Comprehensive clinical report summaries
-│   │   ├── import_data.html    # SD card CSV/JSON batch data import
-│   │   ├── security.html       # System access & audit logs
-│   │   ├── users.html          # User account management (System Admin)
-│   │   └── user_form.html      # Add/edit staff user credentials
-│   └── kiosk/
-│       ├── kiosk_welcome.html  # Kiosk welcome landing screen
-│       ├── kiosk_checkin.html  # Patient demographic check-in form
-│       ├── kiosk_assessment.html # Station checklist overview
-│       ├── kiosk_temperature.html # Body temperature station
-│       ├── kiosk_blood_pressure.html # BP & pulse station
-│       ├── kiosk_height.html   # Height measurement station
-│       ├── kiosk_weight.html   # Weight measurement station
-│       ├── kiosk_bmi.html      # Automated BMI calculation station
-│       ├── kiosk_spo2.html     # Pulse oximetry station
-│       ├── kiosk_summary.html  # Pre-submission review screen
-│       └── kiosk_complete.html # Assessment completed confirmation screen
+│   └── admin/
+│       ├── dashboard.html      # Main EHR analytics dashboard
+│       ├── patients.html       # Patient directory & search
+│       ├── add_patient.html    # Manual patient intake form
+│       ├── ehr_records.html    # Longitudinal health record lists
+│       ├── patient_record_history.html # Detailed single-patient record history
+│       ├── add_health_record.html      # Follow-up health record entry
+│       ├── reports.html        # Comprehensive clinical report summaries
+│       ├── import_data.html    # Health records CSV/JSON batch data import
+│       ├── security.html       # System access & audit logs
+│       ├── users.html          # User account management (System Admin)
+│       └── user_form.html      # Add/edit staff user credentials
 └── .agents/                    # Agent guidance & workflow skills
     └── skills/
         ├── run-dev/            # Instructions for starting the development server
@@ -191,29 +172,21 @@ If seeded using `supabase_schema.sql`:
 
 ## 💻 Usage Guide
 
-### Accessing the Kiosk
-Patients can access the dedicated self-assessment station by visiting:
-```text
-http://127.0.0.1:5000/kiosk
-```
-1. Click **Start Health Assessment**.
-2. Input basic demographic details.
-3. Step through vital monitoring stations (Temperature, Blood Pressure, Height, Weight, BMI, and SpO2).
-4. Review summary status and submit results to the EHR.
-
 ### Accessing the Admin Portal
 Healthcare staff and clinic administrators navigate to:
 ```text
 http://127.0.0.1:5000/login
 ```
-1. Authenticate with an authorized account.
+1. Authenticate with an authorized account (`admin` / `admin123`).
 2. Monitor daily vitals and flag patients needing clinical intervention on the **Dashboard**.
-3. View longitudinal histories and generate official PDF history summaries under **EHR Records**.
-4. Import offline SD card batches under **Import Data**.
+3. Manage patients and encode follow-up vitals under **Patients**.
+4. View longitudinal histories and generate official PDF history summaries under **EHR Records**.
+5. Import offline batches under **Import Data**.
+6. Review system events under **Security**.
 
 ---
 
-## 💾 Kiosk SD Card Import Specification
+## 💾 Health Records Batch Import Specification
 
 When importing data collected from offline kiosk hardware via `/import`, files can be uploaded as CSV or JSON.
 
