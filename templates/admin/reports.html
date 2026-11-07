@@ -26,13 +26,15 @@
                 <span class="akpi-unit">mmHg (Avg)</span>
             </div>
             <div class="akpi-meta">
-                <span class="akpi-badge {% if analytics.bp.optimal_pct >= 70 %}badge-success{% else %}badge-warning{% endif %}">
+                <span
+                    class="akpi-badge {% if analytics.bp.optimal_pct >= 70 %}badge-success{% else %}badge-warning{% endif %}">
                     {{ analytics.bp.optimal_pct }}% Optimal
                 </span>
                 <span class="akpi-sub">Hypertensive: {{ analytics.bp.hypertensive_pct }}%</span>
             </div>
             <div class="akpi-range">
-                <span>Range: {{ analytics.bp.min_sys }}/{{ analytics.bp.min_dia }} – {{ analytics.bp.max_sys }}/{{ analytics.bp.max_dia }}</span>
+                <span>Range: {{ analytics.bp.min_sys }}/{{ analytics.bp.min_dia }} – {{ analytics.bp.max_sys }}/{{
+                    analytics.bp.max_dia }}</span>
             </div>
         </article>
 
@@ -46,7 +48,8 @@
                 <span class="akpi-unit">BPM (Avg)</span>
             </div>
             <div class="akpi-meta">
-                <span class="akpi-badge {% if analytics.hr.normal_pct >= 75 %}badge-success{% else %}badge-warning{% endif %}">
+                <span
+                    class="akpi-badge {% if analytics.hr.normal_pct >= 75 %}badge-success{% else %}badge-warning{% endif %}">
                     {{ analytics.hr.normal_pct }}% Normal
                 </span>
                 <span class="akpi-sub">Tachycardia: {{ analytics.hr.tachycardia_pct }}%</span>
@@ -66,7 +69,8 @@
                 <span class="akpi-unit">SpO2 (Avg)</span>
             </div>
             <div class="akpi-meta">
-                <span class="akpi-badge {% if analytics.spo2.normal_pct >= 90 %}badge-success{% else %}badge-danger{% endif %}">
+                <span
+                    class="akpi-badge {% if analytics.spo2.normal_pct >= 90 %}badge-success{% else %}badge-danger{% endif %}">
                     {{ analytics.spo2.normal_pct }}% Normal
                 </span>
                 <span class="akpi-sub">Hypoxia Risk: {{ analytics.spo2.risk_pct }}%</span>
@@ -86,7 +90,8 @@
                 <span class="akpi-unit">Resting (Avg)</span>
             </div>
             <div class="akpi-meta">
-                <span class="akpi-badge {% if analytics.temp.normal_pct >= 85 %}badge-success{% else %}badge-warning{% endif %}">
+                <span
+                    class="akpi-badge {% if analytics.temp.normal_pct >= 85 %}badge-success{% else %}badge-warning{% endif %}">
                     {{ analytics.temp.normal_pct }}% Normal
                 </span>
                 <span class="akpi-sub">Fever Rate: {{ analytics.temp.fever_pct }}%</span>
@@ -106,7 +111,8 @@
                 <span class="akpi-unit">kg/m² (Avg)</span>
             </div>
             <div class="akpi-meta">
-                <span class="akpi-badge {% if analytics.bmi.normal_pct >= 60 %}badge-success{% else %}badge-warning{% endif %}">
+                <span
+                    class="akpi-badge {% if analytics.bmi.normal_pct >= 60 %}badge-success{% else %}badge-warning{% endif %}">
                     {{ analytics.bmi.normal_pct }}% Healthy Wt
                 </span>
                 <span class="akpi-sub">Avg Wt: {{ analytics.bmi.avg_weight }} kg</span>
@@ -205,17 +211,11 @@
         </div>
 
         <!-- Chart Container -->
-        <div
-            class="vitals-trend-chart-container"
-            id="vitalsLineChart"
-            data-default-metric="bp"
+        <div class="vitals-trend-chart-container" id="vitalsLineChart" data-default-metric="bp"
             data-records='{{ vitals_chart_records | tojson }}'>
 
             <div class="vitals-line-chart-box">
-                <svg
-                    id="vitalsLineChartSvg"
-                    viewBox="0 0 880 340"
-                    preserveAspectRatio="none"
+                <svg id="vitalsLineChartSvg" viewBox="0 0 880 340" preserveAspectRatio="none"
                     aria-label="Vital signs trend line graph">
                 </svg>
             </div>
@@ -257,7 +257,8 @@
                         <div class="radar-fill" style="width: {{ item.normal_pct }}%;"></div>
                     </div>
                     <div class="radar-footer">
-                        <span class="radar-status-badge {% if 'Optimal' in item.status or 'Healthy' in item.status or 'Normal' in item.status %}badge-success{% else %}badge-warning{% endif %}">
+                        <span
+                            class="radar-status-badge {% if 'Optimal' in item.status or 'Healthy' in item.status or 'Normal' in item.status %}badge-success{% else %}badge-warning{% endif %}">
                             {{ item.status }}
                         </span>
                         <small class="radar-flagged">{{ item.flag_count }} flagged ({{ item.flag_pct }}%)</small>
@@ -404,7 +405,8 @@
                         </td>
 
                         <td>
-                            {% set display_status = "Normal" if record.status == "Normal" or (record.status == "Needs Attention" and record.bmi_category == "Normal") else record.status %}
+                            {% set display_status = "Normal" if record.status == "Normal" or (record.status == "Needs
+                            Attention" and record.bmi_category == "Normal") else record.status %}
                             {% if display_status == "Normal" %}
                             <span class="report-status-text normal">
                                 {{ display_status }}

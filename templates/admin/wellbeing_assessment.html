@@ -15,6 +15,9 @@
         </div>
 
         <div class="wellbeing-action-btns">
+            <button type="button" class="btn-survey" onclick="openSurveyModal()">
+                📋 {% if assessment.has_survey %}Edit 5-Question Survey{% else %}Take 5-Question Survey{% endif %}
+            </button>
             <button type="button" class="btn-secondary" onclick="window.print()">
                 🖨️ Print Assessment
             </button>
@@ -65,7 +68,10 @@
         <div class="wellbeing-status-card {{ assessment.tier_badge }}">
             <div class="status-card-header">
                 <span>Overall Screening Status</span>
-                <span class="status-badge {{ assessment.tier_badge }}">{{ assessment.overall_tier }}</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="score-pill">Score: {{ assessment.wellbeing_score }}/100</span>
+                    <span class="status-badge {{ assessment.tier_badge }}">{{ assessment.overall_tier }}</span>
+                </div>
             </div>
             <p class="status-summary-text">{{ assessment.overall_summary }}</p>
             <div class="status-footer-note">
@@ -74,11 +80,63 @@
         </div>
     </div>
 
+    <!-- 5-Question Well-Being Survey Section (CTA or Completed Profile) -->
+    {% if not assessment.has_survey %}
+    <div class="survey-cta-card">
+        <div class="survey-cta-left">
+            <div class="survey-cta-icon">📋</div>
+            <div>
+                <span class="survey-cta-badge">Personalization Available</span>
+                <h3>Personalize {{ patient.first_name }}'s Well-Being Assessment</h3>
+                <p>
+                    Right now, this assessment only reflects clinical vital signs. Answer a quick <strong>5-question
+                        lifestyle survey</strong> (sleep, activity, stress, hydration/diet, and symptoms) to generate
+                    tailored wellness guidance specific to {{ patient.first_name }}.
+                </p>
+            </div>
+        </div>
+        <button type="button" class="btn-survey-large" onclick="openSurveyModal()">
+            ✨ Take 5-Question Survey
+        </button>
+    </div>
+    {% else %}
+    <div class="survey-profile-section">
+        <div class="survey-profile-header">
+            <div>
+                <div class="survey-personalized-tag">
+                    ✅ Personalized via 5-Question Lifestyle Survey
+                    {% if assessment.survey.updated_at %}
+                    <span class="survey-updated-time">• Updated {{ assessment.survey.updated_at }}</span>
+                    {% endif %}
+                </div>
+                <h3>Patient Lifestyle & Survey Profile</h3>
+                <p>Responses below are cross-referenced with {{ patient.first_name }}'s vital signs to customize all guidance on this page.</p>
+            </div>
+            <button type="button" class="btn-outline" onclick="openSurveyModal()">
+                ✏️ Retake / Edit Survey
+            </button>
+        </div>
+
+        <div class="survey-profile-grid">
+            {% for item in assessment.survey_items %}
+            <div class="survey-item-card">
+                <div class="survey-item-top">
+                    <span class="survey-item-icon">{{ item.icon }}</span>
+                    <span class="vital-badge {{ item.badge }}">{{ item.status }}</span>
+                </div>
+                <div class="survey-item-label">{{ item.label }}</div>
+                <div class="survey-item-value">{{ item.value }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Individual Screening Vitals & Observations -->
     <div class="wellbeing-section-header">
         <div>
             <h3>Collected Health Screening Metrics</h3>
-            <p>Evaluation of vital signs against clinical baseline reference thresholds</p>
+            <p>Evaluation of vital signs against clinical baseline reference thresholds{% if assessment.has_survey %} & cross-referenced with survey habits{% endif %}</p>
         </div>
     </div>
 
@@ -98,7 +156,7 @@
             </div>
 
             <div class="vital-card-footer">
-                <span class="guidance-label">Wellness Guidance:</span>
+                <span class="guidance-label">{% if assessment.has_survey %}Tailored Guidance:{% else %}Wellness Guidance:{% endif %}</span>
                 <p>{{ vital.tips }}</p>
             </div>
         </div>
@@ -106,20 +164,41 @@
     </div>
 
     <!-- General Wellness Guidance Pillars -->
-    <div class="wellbeing-section-header" style="margin-top: 32px;">
+    <div class="wellbeing-section-header" style="margin-top: 32px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px;">
         <div>
-            <h3>Personalized General Wellness Guidance</h3>
-            <p>Evidence-based lifestyle practices to support ongoing vitality and prevention</p>
+            <h3>{% if assessment.has_survey %}Personalized Action Plan & Wellness Pillars{% else %}General Wellness Guidance Pillars{% endif %}</h3>
+            <p>{% if assessment.has_survey %}Customized lifestyle recommendations based on {{ patient.first_name }}'s 5-question survey and vital signs{% else %}Evidence-based lifestyle practices to support ongoing vitality and prevention{% endif %}</p>
         </div>
+        {% if not assessment.has_survey %}
+        <button type="button" class="btn-outline" onclick="openSurveyModal()">
+            🎯 Personalize These Pillars
+        </button>
+        {% endif %}
     </div>
 
     <div class="guidance-pillars-grid">
         {% for pillar in assessment.guidance_pillars %}
-        <div class="pillar-card">
-            <div class="pillar-header">
-                <span class="pillar-icon">{{ pillar.icon }}</span>
-                <h4>{{ pillar.title }}</h4>
+        <div class="pillar-card {% if assessment.has_survey %}pillar-personalized{% endif %} {% if 'High Priority' in pillar.tag %}pillar-priority-card{% endif %}">
+            <div class="pillar-card-topbar">
+                <div class="pillar-icon-box {% if 'High Priority' in pillar.tag %}pillar-icon-priority{% endif %}">
+                    {{ pillar.icon }}
+                </div>
+                {% if pillar.tag %}
+                <span class="pillar-badge {{ pillar.tag_badge }}">
+                    {% if 'danger' in pillar.tag_badge %}🚨{% elif 'warning' in pillar.tag_badge %}⚡{% elif 'success' in pillar.tag_badge %}🌱{% else %}💡{% endif %}
+                    {{ pillar.tag }}
+                </span>
+                {% endif %}
             </div>
+
+            <h4 class="pillar-card-title">{{ pillar.title }}</h4>
+
+            {% if pillar.personal_note %}
+            <div class="pillar-personal-note {% if 'High Priority' in pillar.tag %}note-priority{% endif %}">
+                💡 {{ pillar.personal_note }}
+            </div>
+            {% endif %}
+
             <p class="pillar-content">{{ pillar.content }}</p>
         </div>
         {% endfor %}
@@ -151,6 +230,234 @@
     </div>
 
 </section>
+
+<!-- 5-Question Well-Being Personalization Modal -->
+<div id="wellbeingSurveyModal" class="survey-modal-backdrop" aria-hidden="true">
+    <div class="survey-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="surveyModalTitle">
+        <div class="survey-modal-header">
+            <div>
+                <span class="survey-modal-eyebrow">🌿 Personalized Well-Being Questionnaire</span>
+                <h3 id="surveyModalTitle">5-Question Lifestyle & Wellness Survey</h3>
+                <p>Answer these 5 short questions for <strong>{{ patient.first_name }} {{ patient.last_name }}</strong> to tailor the assessment beyond generic vital thresholds.</p>
+            </div>
+            <button type="button" class="survey-modal-close" onclick="closeSurveyModal()" aria-label="Close modal">✕</button>
+        </div>
+
+        <form method="POST" action="{{ url_for('wellbeing_assessment_page', patient_id=patient.id, record_id=record.id) }}" id="wellbeingSurveyForm">
+            <div class="survey-modal-body">
+
+                <!-- Question 1: Sleep -->
+                <div class="survey-question-block">
+                    <div class="survey-q-title">
+                        <span class="survey-q-num">1</span>
+                        <div>
+                            <label>Restorative Sleep Duration</label>
+                            <small>How many hours of restful sleep does the patient typically get per night?</small>
+                        </div>
+                    </div>
+                    <div class="survey-options-grid">
+                        <label class="survey-option-card">
+                            <input type="radio" name="sleep" value="under_5" required {% if assessment.survey.get('sleep') == 'under_5' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>😴 Less than 5 hours</strong>
+                                <span>Poor, interrupted, or restless sleep</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="sleep" value="5_to_6" {% if assessment.survey.get('sleep') == '5_to_6' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🌙 5 – 6 hours</strong>
+                                <span>Slightly below ideal nightly rest</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="sleep" value="7_to_8" {% if assessment.survey.get('sleep') == '7_to_8' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>✨ 7 – 8 hours (Optimal)</strong>
+                                <span>Consistent, restorative sleep</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="sleep" value="over_9" {% if assessment.survey.get('sleep') == 'over_9' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🛌 9+ hours</strong>
+                                <span>Extended sleep or daytime oversleeping</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question 2: Physical Activity -->
+                <div class="survey-question-block">
+                    <div class="survey-q-title">
+                        <span class="survey-q-num">2</span>
+                        <div>
+                            <label>Weekly Physical Activity</label>
+                            <small>How often does the patient engage in brisk walking, sports, or active chores?</small>
+                        </div>
+                    </div>
+                    <div class="survey-options-grid">
+                        <label class="survey-option-card">
+                            <input type="radio" name="activity" value="sedentary" required {% if assessment.survey.get('activity') == 'sedentary' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🪑 Rarely / Sedentary</strong>
+                                <span>Mostly sitting throughout the day</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="activity" value="light" {% if assessment.survey.get('activity') == 'light' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🚶 1 – 2 days / week</strong>
+                                <span>Light walking or occasional movement</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="activity" value="moderate" {% if assessment.survey.get('activity') == 'moderate' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🏃 3 – 4 days / week</strong>
+                                <span>Moderate exercise (~30 mins/session)</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="activity" value="active" {% if assessment.survey.get('activity') == 'active' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>💪 5+ days / week</strong>
+                                <span>Active daily workouts or physical labor</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question 3: Daily Stress -->
+                <div class="survey-question-block">
+                    <div class="survey-q-title">
+                        <span class="survey-q-num">3</span>
+                        <div>
+                            <label>Daily Stress & Mental Tension</label>
+                            <small>How would the patient rate their typical work, family, or mental stress level?</small>
+                        </div>
+                    </div>
+                    <div class="survey-options-grid cols-3">
+                        <label class="survey-option-card">
+                            <input type="radio" name="stress" value="low" required {% if assessment.survey.get('stress') == 'low' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>😌 Low / Relaxed</strong>
+                                <span>Calm routine, manageable load</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="stress" value="moderate" {% if assessment.survey.get('stress') == 'moderate' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>😐 Moderate</strong>
+                                <span>Occasional pressure, recovers well</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="stress" value="high" {% if assessment.survey.get('stress') == 'high' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>⚡ High / Overwhelmed</strong>
+                                <span>Frequent stress, tension, or burnout</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question 4: Hydration & Nutrition -->
+                <div class="survey-question-block">
+                    <div class="survey-q-title">
+                        <span class="survey-q-num">4</span>
+                        <div>
+                            <label>Hydration & Daily Nutrition</label>
+                            <small>Which best describes the patient's daily water intake and meal quality?</small>
+                        </div>
+                    </div>
+                    <div class="survey-options-grid cols-3">
+                        <label class="survey-option-card">
+                            <input type="radio" name="hydration_diet" value="poor" required {% if assessment.survey.get('hydration_diet') == 'poor' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🥤 Low Hydration / Salty</strong>
+                                <span>&lt;4 cups water; frequent fast/canned food</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="hydration_diet" value="fair" {% if assessment.survey.get('hydration_diet') == 'fair' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>💧 Moderate Intake</strong>
+                                <span>4–6 cups water; mixed home meals</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="hydration_diet" value="good" {% if assessment.survey.get('hydration_diet') == 'good' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🥗 Optimal (8+ Cups)</strong>
+                                <span>Plenty of water, veggies, fruits &amp; lean protein</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Question 5: Current Symptoms / Discomfort -->
+                <div class="survey-question-block" style="margin-bottom: 0;">
+                    <div class="survey-q-title">
+                        <span class="survey-q-num">5</span>
+                        <div>
+                            <label>Current Physical Feelings or Discomfort</label>
+                            <small>Is the patient currently noticing any recurring physical discomfort?</small>
+                        </div>
+                    </div>
+                    <div class="survey-options-grid">
+                        <label class="survey-option-card">
+                            <input type="radio" name="symptoms" value="none" required {% if assessment.survey.get('symptoms') == 'none' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>✅ None — Feeling Good</strong>
+                                <span>Comfortable with steady energy</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="symptoms" value="fatigue" {% if assessment.survey.get('symptoms') == 'fatigue' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🔋 Frequent Fatigue</strong>
+                                <span>Low energy or daytime drowsiness</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="symptoms" value="headache_dizziness" {% if assessment.survey.get('symptoms') == 'headache_dizziness' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>💫 Headaches / Dizziness</strong>
+                                <span>Lightheadedness or head tension</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="symptoms" value="shortness_breath" {% if assessment.survey.get('symptoms') == 'shortness_breath' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🌬️ Mild Breathlessness</strong>
+                                <span>Winded easily during light activity</span>
+                            </span>
+                        </label>
+                        <label class="survey-option-card">
+                            <input type="radio" name="symptoms" value="aches_pains" {% if assessment.survey.get('symptoms') == 'aches_pains' %}checked{% endif %}>
+                            <span class="option-content">
+                                <strong>🦴 Muscle / Joint Aches</strong>
+                                <span>Body stiffness, back, or joint soreness</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="survey-modal-footer">
+                <span id="surveyProgressText" class="survey-progress-text">0 of 5 questions answered</span>
+                <div class="survey-modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeSurveyModal()">Cancel</button>
+                    <button type="submit" class="btn-survey">
+                        🌿 Save &amp; Personalize Assessment
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
 <style>
     .wellbeing-page-card {
@@ -596,26 +903,16 @@
     .pillar-card {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 20px;
-    }
-
-    .pillar-header {
+        border-radius: 16px;
+        padding: 22px;
         display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 10px;
+        flex-direction: column;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .pillar-icon {
-        font-size: 24px;
-    }
-
-    .pillar-header h4 {
-        margin: 0;
-        font-size: 16px;
-        color: #0f172a;
-        font-weight: 700;
+    .pillar-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
     }
 
     .pillar-content {
@@ -656,6 +953,575 @@
         color: #713f12;
     }
 
+    /* Survey Buttons & Score Pill */
+    .btn-survey {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 700;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: #ffffff;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+        transition: all 0.2s ease;
+    }
+
+    .btn-survey:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        transform: translateY(-1px);
+    }
+
+    .score-pill {
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #0f172a;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+    }
+
+    /* Survey CTA Banner */
+    .survey-cta-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+        background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+        border: 1.5px dashed #3b82f6;
+        border-radius: 16px;
+        padding: 22px 26px;
+        margin-bottom: 30px;
+    }
+
+    @media (max-width: 820px) {
+        .survey-cta-card {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+
+    .survey-cta-left {
+        display: flex;
+        align-items: flex-start;
+        gap: 18px;
+        flex: 1;
+    }
+
+    .survey-cta-icon {
+        font-size: 32px;
+        width: 54px;
+        height: 54px;
+        border-radius: 14px;
+        background: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+        flex-shrink: 0;
+    }
+
+    .survey-cta-badge {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        margin-bottom: 6px;
+    }
+
+    .survey-cta-left h3 {
+        margin: 0 0 6px 0;
+        font-size: 18px;
+        color: #0f172a;
+    }
+
+    .survey-cta-left p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        color: #334155;
+    }
+
+    .btn-survey-large {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 13px 22px;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 700;
+        background: #0f6bff;
+        color: #ffffff;
+        border: none;
+        cursor: pointer;
+        white-space: nowrap;
+        box-shadow: 0 6px 16px rgba(15, 107, 255, 0.25);
+        transition: all 0.2s ease;
+    }
+
+    .btn-survey-large:hover {
+        background: #0847b8;
+        transform: translateY(-1px);
+    }
+
+    /* Survey Completed Profile Section */
+    .survey-profile-section {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 16px;
+        padding: 22px;
+        margin-bottom: 30px;
+    }
+
+    .survey-profile-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .survey-personalized-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #047857;
+        background: #d1fae5;
+        padding: 4px 12px;
+        border-radius: 999px;
+        margin-bottom: 8px;
+    }
+
+    .survey-updated-time {
+        font-weight: 500;
+        color: #065f46;
+    }
+
+    .survey-profile-header h3 {
+        margin: 0 0 4px 0;
+        font-size: 18px;
+        color: #0f172a;
+    }
+
+    .survey-profile-header p {
+        margin: 0;
+        font-size: 13px;
+        color: #64748b;
+    }
+
+    .survey-profile-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+    }
+
+    .survey-item-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px 16px;
+    }
+
+    .survey-item-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .survey-item-icon {
+        font-size: 22px;
+    }
+
+    .survey-item-label {
+        font-size: 12px;
+        color: #64748b;
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .survey-item-value {
+        font-size: 14px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    /* Enhanced Personalized Pillar Cards & High Priority Focus UI */
+    .pillar-personalized {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+    }
+
+    .pillar-card.pillar-priority-card {
+        border: 1.5px solid #fca5a5;
+        background: linear-gradient(180deg, #fff8f8 0%, #ffffff 80px);
+        box-shadow: 0 4px 18px rgba(239, 68, 68, 0.09);
+    }
+
+    .pillar-card-topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .pillar-icon-box {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        flex-shrink: 0;
+    }
+
+    .pillar-icon-priority {
+        background: #fee2e2;
+        border: 1px solid #fecaca;
+    }
+
+    .pillar-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 999px;
+        white-space: nowrap;
+        flex-shrink: 0;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        line-height: 1.2;
+    }
+
+    .pillar-badge.badge-danger {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #f87171;
+        box-shadow: 0 2px 6px rgba(239, 68, 68, 0.12);
+    }
+
+    .pillar-badge.badge-warning {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fcd34d;
+    }
+
+    .pillar-badge.badge-success {
+        background: #dcfce7;
+        color: #166534;
+        border: 1px solid #86efac;
+    }
+
+    .pillar-badge.badge-info {
+        background: #e0f2fe;
+        color: #075985;
+        border: 1px solid #7dd3fc;
+    }
+
+    .pillar-card-title {
+        margin: 0 0 10px 0;
+        font-size: 16px;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.4;
+    }
+
+    .pillar-personal-note {
+        font-size: 12px;
+        font-weight: 600;
+        color: #0f6bff;
+        background: #eff6ff;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-bottom: 12px;
+        line-height: 1.45;
+    }
+
+    .pillar-personal-note.note-priority {
+        color: #b91c1c;
+        background: #fef2f2;
+        border-color: #fecaca;
+    }
+
+    /* 5-Question Survey Modal Styles */
+    .survey-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(4px);
+        z-index: 9999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    .survey-modal-backdrop.open {
+        display: flex;
+    }
+
+    .survey-modal-dialog {
+        background: #ffffff;
+        width: 100%;
+        max-width: 780px;
+        max-height: 90vh;
+        border-radius: 20px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        animation: modalSlideUp 0.22s ease-out;
+    }
+
+    @keyframes modalSlideUp {
+        from {
+            opacity: 0;
+            transform: translateY(16px) scale(0.98);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    .survey-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 22px 28px;
+        background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);
+        border-bottom: 1px solid #dbeafe;
+    }
+
+    .survey-modal-eyebrow {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #059669;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+
+    .survey-modal-header h3 {
+        margin: 0 0 6px 0;
+        font-size: 20px;
+        color: #0f172a;
+    }
+
+    .survey-modal-header p {
+        margin: 0;
+        font-size: 13px;
+        color: #475569;
+        line-height: 1.45;
+    }
+
+    .survey-modal-close {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        font-size: 16px;
+        color: #475569;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all 0.15s ease;
+    }
+
+    .survey-modal-close:hover {
+        background: #f1f5f9;
+        color: #0f172a;
+    }
+
+    #wellbeingSurveyForm {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        flex: 1;
+    }
+
+    .survey-modal-body {
+        padding: 24px 28px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        max-height: calc(90vh - 175px);
+    }
+
+    .survey-question-block {
+        margin-bottom: 24px;
+        padding-bottom: 22px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .survey-q-title {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .survey-q-num {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #0f6bff;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .survey-q-title label {
+        display: block;
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 2px;
+    }
+
+    .survey-q-title small {
+        display: block;
+        font-size: 13px;
+        color: #64748b;
+    }
+
+    .survey-options-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        padding-left: 40px;
+    }
+
+    .survey-options-grid.cols-3 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    @media (max-width: 680px) {
+        .survey-options-grid,
+        .survey-options-grid.cols-3 {
+            grid-template-columns: 1fr;
+            padding-left: 0;
+        }
+    }
+
+    .survey-option-card {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
+        font-weight: 400;
+        padding: 12px 14px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        background: #f8fafc;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .survey-option-card:hover {
+        border-color: #93c5fd;
+        background: #ffffff;
+    }
+
+    /* Override global input{width:100%;min-height:46px;padding:12px 14px} for radios */
+    .survey-option-card input[type="radio"] {
+        appearance: auto;
+        -webkit-appearance: radio;
+        width: 16px;
+        height: 16px;
+        min-width: 16px;
+        min-height: 16px;
+        max-width: 16px;
+        padding: 0;
+        margin: 2px 0 0 0;
+        border-radius: 50%;
+        box-shadow: none;
+        accent-color: #0f6bff;
+        flex: 0 0 16px;
+        cursor: pointer;
+    }
+
+    .survey-option-card input[type="radio"]:focus {
+        box-shadow: none;
+    }
+
+    .survey-option-card:has(input[type="radio"]:checked) {
+        border-color: #0f6bff;
+        background: #eff6ff;
+        box-shadow: 0 2px 8px rgba(15, 107, 255, 0.12);
+    }
+
+    .option-content {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .option-content strong {
+        font-size: 13px;
+        color: #0f172a;
+    }
+
+    .option-content span {
+        font-size: 12px;
+        color: #64748b;
+        line-height: 1.35;
+    }
+
+    .survey-modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 16px 28px;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .survey-progress-text {
+        font-size: 13px;
+        font-weight: 600;
+        color: #475569;
+    }
+
+    .survey-modal-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
     /* Bottom Actions */
     .wellbeing-bottom-actions {
         display: flex;
@@ -672,7 +1538,9 @@
         .sidebar,
         .topbar,
         .wellbeing-action-btns,
-        .wellbeing-bottom-actions {
+        .wellbeing-bottom-actions,
+        .survey-cta-card,
+        .survey-modal-backdrop {
             display: none !important;
         }
 
@@ -688,4 +1556,56 @@
         }
     }
 </style>
+
+<script>
+    const surveyModal = document.getElementById('wellbeingSurveyModal');
+    const surveyForm = document.getElementById('wellbeingSurveyForm');
+    const surveyProgressText = document.getElementById('surveyProgressText');
+
+    function updateSurveyProgress() {
+        if (!surveyForm || !surveyProgressText) return;
+        const groups = ['sleep', 'activity', 'stress', 'hydration_diet', 'symptoms'];
+        let answered = 0;
+        groups.forEach(name => {
+            if (surveyForm.querySelector(`input[name="${name}"]:checked`)) {
+                answered++;
+            }
+        });
+        surveyProgressText.textContent = `${answered} of 5 questions answered`;
+    }
+
+    function openSurveyModal() {
+        if (!surveyModal) return;
+        surveyModal.classList.add('open');
+        surveyModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        updateSurveyProgress();
+    }
+
+    function closeSurveyModal() {
+        if (!surveyModal) return;
+        surveyModal.classList.remove('open');
+        surveyModal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+
+    if (surveyModal) {
+        surveyModal.addEventListener('click', function (e) {
+            if (e.target === surveyModal) {
+                closeSurveyModal();
+            }
+        });
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && surveyModal && surveyModal.classList.contains('open')) {
+            closeSurveyModal();
+        }
+    });
+
+    if (surveyForm) {
+        surveyForm.addEventListener('change', updateSurveyProgress);
+        updateSurveyProgress();
+    }
+</script>
 {% endblock %}

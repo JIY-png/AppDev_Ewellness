@@ -5,6 +5,7 @@ venv/
 .venv/
 instance/
 *.db
+wellbeing_surveys.json
 .DS_Store
 service-account-key*.json
 *-key.json

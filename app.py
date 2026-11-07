@@ -451,13 +451,83 @@ def create_health_record(patient_id, temperature, heart_rate, oxygen_saturation,
     return new_record
 
 
-def get_wellbeing_assessment(record, patient):
+WELLBEING_SURVEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wellbeing_surveys.json")
+
+
+def load_wellbeing_surveys():
+    if not os.path.exists(WELLBEING_SURVEY_FILE):
+        return {}
+    try:
+        with open(WELLBEING_SURVEY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception as e:
+        print(f"Error loading wellbeing surveys: {e}")
+        return {}
+
+
+def get_wellbeing_survey(patient_id, record_id=None, record=None):
+    # Check if survey_data is already stored on the record object from Supabase
+    if record and isinstance(record.get("survey_data"), dict) and record["survey_data"]:
+        return record["survey_data"]
+
+    surveys = load_wellbeing_surveys()
+    if record_id and f"record_{record_id}" in surveys:
+        return surveys[f"record_{record_id}"]
+    if f"patient_{patient_id}" in surveys:
+        return surveys[f"patient_{patient_id}"]
+    return None
+
+
+def save_wellbeing_survey(patient_id, record_id, survey_data):
+    surveys = load_wellbeing_surveys()
+    payload = {
+        "sleep": survey_data.get("sleep", "7_to_8"),
+        "activity": survey_data.get("activity", "moderate"),
+        "stress": survey_data.get("stress", "low"),
+        "hydration_diet": survey_data.get("hydration_diet", "good"),
+        "symptoms": survey_data.get("symptoms", "none"),
+        "updated_at": datetime.now().strftime("%Y-%m-%d %I:%M %p")
+    }
+    if record_id:
+        surveys[f"record_{record_id}"] = payload
+    surveys[f"patient_{patient_id}"] = payload
+
+    try:
+        with open(WELLBEING_SURVEY_FILE, "w", encoding="utf-8") as f:
+            json.dump(surveys, f, indent=2)
+    except Exception as e:
+        print(f"Error saving wellbeing survey file: {e}")
+
+    # Also attempt to persist in Supabase records.survey_data if column exists
+    if supabase is not None and record_id:
+        try:
+            supabase.table("records").update({"survey_data": payload}).eq("id", record_id).execute()
+        except Exception:
+            pass
+
+    return payload
+
+
+def get_wellbeing_assessment(record, patient, survey=None):
     """
-    Computes comprehensive, personalized wellbeing guidance based on collected screening vitals.
+    Computes comprehensive, personalized wellbeing guidance based on collected screening vitals
+    and optional 5-question patient lifestyle survey responses.
     Designed to support general health monitoring without providing medical diagnoses or treatment recommendations.
     """
     if not record:
         return None
+
+    if survey is None and patient:
+        survey = get_wellbeing_survey(patient.get("id"), record.get("id"), record)
+
+    has_survey = bool(survey and isinstance(survey, dict) and survey.get("sleep"))
+
+    sleep_ans = survey.get("sleep", "") if has_survey else ""
+    activity_ans = survey.get("activity", "") if has_survey else ""
+    stress_ans = survey.get("stress", "") if has_survey else ""
+    diet_ans = survey.get("hydration_diet", "") if has_survey else ""
+    symptom_ans = survey.get("symptoms", "") if has_survey else ""
 
     try:
         temp = float(record.get("J") or 0.0)
@@ -502,92 +572,144 @@ def get_wellbeing_assessment(record, patient):
 
     bmi_cat = record.get("bmi_category") or get_bmi_category(bmi)
 
-    # 1. Temperature Analysis
+    # 1. Temperature Analysis (Personalized with hydration & symptom survey data)
     if temp > 37.5:
         temp_status = "Elevated"
         temp_badge = "badge-danger"
         temp_note = f"{temp:.1f}°C is above typical resting levels (36.0°C - 37.5°C)."
-        temp_tips = "Drink plenty of cool fluids, rest in a well-ventilated space, and re-check temperature regularly."
+        if has_survey and diet_ans == "poor":
+            temp_tips = "Since you reported low daily water intake (<4 glasses), prioritize immediate oral hydration with cool water or electrolyte fluids and rest in a cool room."
+        elif has_survey and symptom_ans in ["aches_pains", "fatigue"]:
+            temp_tips = "Elevated temperature paired with your reported body discomfort/fatigue warrants rest, plenty of fluids, and clinical monitoring."
+        else:
+            temp_tips = "Drink plenty of cool fluids, rest in a well-ventilated space, and re-check temperature regularly."
     elif temp < 36.0 and temp > 0:
         temp_status = "Below Average"
         temp_badge = "badge-warning"
         temp_note = f"{temp:.1f}°C is slightly below the standard baseline."
-        temp_tips = "Keep warm with suitable clothing and consume warm beverages."
+        temp_tips = "Keep warm with suitable clothing, consume warm nourishing beverages, and monitor if fatigue persists."
     else:
         temp_status = "Normal"
         temp_badge = "badge-success"
         temp_note = f"{temp:.1f}°C is within optimal standard resting body temperature."
-        temp_tips = "Continue normal daily hydration and thermal comfort habits."
+        if has_survey and diet_ans == "poor":
+            temp_tips = "Temperature is normal, though increasing your water intake from <4 glasses to 8+ glasses will help sustain thermal and cellular balance."
+        else:
+            temp_tips = "Continue normal daily hydration and thermal comfort habits."
 
-    # 2. Blood Pressure Analysis
+    # 2. Blood Pressure Analysis (Personalized with stress, diet & activity survey data)
     if systolic >= 140 or diastolic >= 90:
         bp_status = "High BP (Stage 2)"
         bp_badge = "badge-danger"
         bp_note = f"{bp_str} mmHg is in the hypertension range."
-        bp_tips = "Limit dietary sodium, practice slow diaphragmatic breathing, and have your blood pressure reviewed by a healthcare professional."
+        if has_survey and stress_ans == "high" and diet_ans == "poor":
+            bp_tips = "Your reported High Daily Stress and high-sodium/low-water diet directly impact blood pressure. Prioritize immediate sodium reduction, guided breathing, and a physician review."
+        elif has_survey and stress_ans == "high":
+            bp_tips = "High daily stress can spike blood pressure. Practice 10 minutes of slow diaphragmatic breathing, reduce workload tension, and have clinic staff review this reading."
+        elif has_survey and diet_ans == "poor":
+            bp_tips = "Cut back on processed/salty foods you reported, increase water intake to 8+ glasses, and consult a healthcare provider regarding this reading."
+        else:
+            bp_tips = "Limit dietary sodium, practice slow diaphragmatic breathing, and have your blood pressure reviewed by a healthcare professional."
     elif systolic >= 130 or diastolic >= 80:
         bp_status = "Stage 1 Elevated"
         bp_badge = "badge-warning"
         bp_note = f"{bp_str} mmHg is slightly above standard normal parameters."
-        bp_tips = "Engage in moderate physical activity like walking, manage daily stress, and drink adequate water throughout the day."
+        if has_survey and stress_ans in ["high", "moderate"]:
+            bp_tips = f"With your {stress_ans} stress level, daily mindfulness breaks, 7-8 hours of sleep, and cutting excess salt can help bring {bp_str} mmHg back under 120/80."
+        elif has_survey and activity_ans == "sedentary":
+            bp_tips = "Transitioning from a sedentary routine to a 20-minute daily brisk walk is one of the most effective ways to naturally lower Stage 1 elevated BP."
+        else:
+            bp_tips = "Engage in moderate physical activity like walking, manage daily stress, and drink adequate water throughout the day."
     elif systolic < 90 or diastolic < 60:
         bp_status = "Low BP"
         bp_badge = "badge-info"
         bp_note = f"{bp_str} mmHg is lower than standard resting range."
-        bp_tips = "Stay hydrated, stand up slowly after sitting or resting, and consult a provider if dizziness occurs."
+        if has_survey and symptom_ans == "headache_dizziness":
+            bp_tips = "Because you also reported dizziness/headaches with low BP, increase fluid intake immediately, stand up slowly, and notify clinic staff."
+        else:
+            bp_tips = "Stay hydrated, stand up slowly after sitting or resting, and consult a provider if dizziness occurs."
     else:
         bp_status = "Optimal"
         bp_badge = "badge-success"
         bp_note = f"{bp_str} mmHg is within healthy resting parameters."
-        bp_tips = "Maintain a heart-healthy diet with plenty of potassium-rich foods and regular movement."
+        if has_survey and stress_ans == "high":
+            bp_tips = "Your BP is currently optimal despite reporting high daily stress—protect your cardiovascular health with daily relaxation breaks so stress doesn't elevate it over time."
+        else:
+            bp_tips = "Maintain a heart-healthy diet with plenty of potassium-rich foods and regular movement."
 
-    # 3. Heart Rate Analysis
+    # 3. Heart Rate Analysis (Personalized with sleep, stress & activity survey data)
     if hr > 100:
         hr_status = "Elevated Pulse"
         hr_badge = "badge-danger"
         hr_note = f"{hr} BPM is elevated for a resting heart rate."
-        hr_tips = "Allow time for physical and mental relaxation; reduce caffeine and stimulant intake."
+        if has_survey and (stress_ans == "high" or sleep_ans in ["under_5", "5_to_6"]):
+            hr_tips = "Insufficient sleep and elevated stress activate the sympathetic nervous system, raising resting pulse. Prioritize rest, hydration, and reduced caffeine today."
+        else:
+            hr_tips = "Allow time for physical and mental relaxation; reduce caffeine and stimulant intake."
     elif hr < 60 and hr > 0:
         hr_status = "Low Pulse"
         hr_badge = "badge-warning"
         hr_note = f"{hr} BPM is lower than average (unless physically conditioned or an athlete)."
-        hr_tips = "Ensure adequate rest and hydration; note if any fatigue or lightheadedness occurs."
+        if has_survey and activity_ans == "active":
+            hr_tips = "Since you exercise 5+ days/week, a lower resting heart rate often reflects strong cardiovascular conditioning. Monitor only if dizziness or fatigue occurs."
+        else:
+            hr_tips = "Ensure adequate rest and hydration; note if any fatigue or lightheadedness occurs."
     else:
         hr_status = "Normal Pulse"
         hr_badge = "badge-success"
         hr_note = f"{hr} BPM is within the healthy resting pulse range (60-100 BPM)."
-        hr_tips = "Support cardiorespiratory endurance through consistent aerobic movement."
+        if has_survey and activity_ans in ["sedentary", "light"]:
+            hr_tips = "Your resting pulse is normal. Adding 2–3 days of moderate cardio weekly will further strengthen heart rate variability and stamina."
+        else:
+            hr_tips = "Support cardiorespiratory endurance through consistent aerobic movement."
 
-    # 4. Oxygen Saturation Analysis
+    # 4. Oxygen Saturation Analysis (Personalized with breathing discomfort & activity)
     if spo2 < 95 and spo2 > 0:
         spo2_status = "Low Oxygen"
         spo2_badge = "badge-danger"
         spo2_note = f"{spo2}% is below optimal arterial oxygen saturation (≥95%)."
-        spo2_tips = "Sit upright, practice relaxed slow deep breathing, and have your oxygenation evaluated by clinic staff."
+        if has_survey and symptom_ans == "shortness_breath":
+            spo2_tips = "You reported shortness of breath alongside low SpO2 (<95%). Sit upright, breathe slowly, and have a healthcare provider evaluate you promptly."
+        else:
+            spo2_tips = "Sit upright, practice relaxed slow deep breathing, and have your oxygenation evaluated by clinic staff."
     else:
         spo2_status = "Normal Saturation"
         spo2_badge = "badge-success"
         spo2_note = f"{spo2}% indicates efficient respiratory oxygen delivery."
-        spo2_tips = "Maintain good indoor air ventilation and practice regular aerobic exercise."
+        if has_survey and symptom_ans == "shortness_breath":
+            spo2_tips = "Resting SpO2 is normal (≥95%), though since you noted mild breathlessness on exertion, pace your physical activities and discuss respiratory conditioning with staff."
+        else:
+            spo2_tips = "Maintain good indoor air ventilation and practice regular aerobic exercise."
 
-    # 5. BMI & Weight Analysis
+    # 5. BMI & Weight Analysis (Personalized with activity & nutrition survey data)
     if bmi_cat == "Underweight":
         bmi_status = "Underweight"
         bmi_badge = "badge-info"
         bmi_note = f"BMI of {bmi:.1f} kg/m² is below the healthy weight threshold (<18.5)."
-        bmi_tips = "Focus on nutrient-rich whole foods, healthy fats, and balanced caloric intake."
+        if has_survey and diet_ans in ["poor", "fair"]:
+            bmi_tips = "Based on your nutrition survey, add calorie-dense whole foods (avocados, nuts, eggs, lean proteins) and structured meal times to build healthy mass."
+        else:
+            bmi_tips = "Focus on nutrient-rich whole foods, healthy fats, and balanced caloric intake."
     elif bmi_cat in ["Overweight", "Obese"]:
         bmi_status = bmi_cat
         bmi_badge = "badge-warning" if bmi_cat == "Overweight" else "badge-danger"
         bmi_note = f"BMI of {bmi:.1f} kg/m² is in the {bmi_cat.lower()} category (≥25.0)."
-        bmi_tips = "Incorporate 30 minutes of daily physical activity, increase dietary fiber, and balance portion sizes."
+        if has_survey and activity_ans == "sedentary":
+            bmi_tips = f"Since your current routine is mostly sedentary, start gently with a 15–20 minute daily walk and replace sugary beverages with water to steadily improve your {bmi:.1f} BMI."
+        elif has_survey and diet_ans == "poor":
+            bmi_tips = "Pairing your current movement habits with whole, high-fiber foods and 8+ glasses of water before meals will significantly support healthy weight management."
+        else:
+            bmi_tips = "Incorporate 30 minutes of daily physical activity, increase dietary fiber, and balance portion sizes."
     else:
         bmi_status = "Normal Weight"
         bmi_badge = "badge-success"
         bmi_note = f"BMI of {bmi:.1f} kg/m² is in the ideal healthy weight bracket (18.5 - 24.9)."
-        bmi_tips = "Keep up a balanced nutritional regimen and consistent weekly exercise."
+        if has_survey and activity_ans == "active" and diet_ans == "good":
+            bmi_tips = "Your active exercise routine and balanced nutrition are keeping your BMI in the ideal range—keep up these strong habits!"
+        else:
+            bmi_tips = "Keep up a balanced nutritional regimen and consistent weekly exercise."
 
-    # Overall wellness score and tier
+    # Overall wellness findings & composite score
     findings = []
     if temp_status != "Normal": findings.append("Body Temperature")
     if "Normal" not in bp_status and "Optimal" not in bp_status: findings.append("Blood Pressure")
@@ -595,43 +717,296 @@ def get_wellbeing_assessment(record, patient):
     if "Normal" not in spo2_status: findings.append("Oxygen Saturation")
     if bmi_cat != "Normal": findings.append("BMI / Body Composition")
 
-    if not findings:
+    # Calculate Vitals Score (max 60)
+    vitals_score = 60 - (len(findings) * 10)
+    if "danger" in [temp_badge, bp_badge, hr_badge, spo2_badge, bmi_badge]:
+        vitals_score -= 5
+    vitals_score = max(15, min(60, vitals_score))
+
+    # Build Survey Profile & Lifestyle Score (max 40)
+    survey_items = []
+    lifestyle_watchpoints = []
+    lifestyle_score = 0
+
+    if has_survey:
+        # Q1: Sleep
+        sleep_map = {
+            "under_5": ("< 5 Hours / Night", "Sleep Deficit", "badge-danger", 2),
+            "5_to_6": ("5 – 6 Hours / Night", "Below Ideal", "badge-warning", 5),
+            "7_to_8": ("7 – 8 Hours / Night", "Optimal Rest", "badge-success", 8),
+            "over_9": ("9+ Hours / Night", "Extended Sleep", "badge-info", 6)
+        }
+        s_val, s_status, s_badge, s_pts = sleep_map.get(sleep_ans, ("7 – 8 Hours / Night", "Optimal Rest", "badge-success", 8))
+        lifestyle_score += s_pts
+        if s_badge in ["badge-danger", "badge-warning"]:
+            lifestyle_watchpoints.append("Sleep Duration")
+        survey_items.append({
+            "icon": "😴",
+            "label": "Nightly Sleep",
+            "value": s_val,
+            "status": s_status,
+            "badge": s_badge
+        })
+
+        # Q2: Physical Activity
+        act_map = {
+            "sedentary": ("Rarely / Sedentary", "Low Activity", "badge-danger", 2),
+            "light": ("1 – 2 Days / Week", "Light Movement", "badge-warning", 5),
+            "moderate": ("3 – 4 Days / Week", "Moderately Active", "badge-success", 8),
+            "active": ("5+ Days / Week", "Highly Active", "badge-success", 8)
+        }
+        a_val, a_status, a_badge, a_pts = act_map.get(activity_ans, ("3 – 4 Days / Week", "Moderately Active", "badge-success", 8))
+        lifestyle_score += a_pts
+        if a_badge in ["badge-danger", "badge-warning"]:
+            lifestyle_watchpoints.append("Physical Activity")
+        survey_items.append({
+            "icon": "🏃",
+            "label": "Exercise Routine",
+            "value": a_val,
+            "status": a_status,
+            "badge": a_badge
+        })
+
+        # Q3: Daily Stress
+        stress_map = {
+            "low": ("Low / Relaxed", "Well Managed", "badge-success", 8),
+            "moderate": ("Moderate Pressure", "Manageable", "badge-warning", 5),
+            "high": ("High / Overwhelmed", "Elevated Stress", "badge-danger", 2)
+        }
+        st_val, st_status, st_badge, st_pts = stress_map.get(stress_ans, ("Low / Relaxed", "Well Managed", "badge-success", 8))
+        lifestyle_score += st_pts
+        if st_badge == "badge-danger":
+            lifestyle_watchpoints.append("High Daily Stress")
+        survey_items.append({
+            "icon": "🧠",
+            "label": "Daily Stress Level",
+            "value": st_val,
+            "status": st_status,
+            "badge": st_badge
+        })
+
+        # Q4: Hydration & Diet
+        diet_map = {
+            "poor": ("< 4 Cups / Processed", "Needs Improvement", "badge-danger", 2),
+            "fair": ("4 – 6 Cups / Mixed Diet", "Moderate Intake", "badge-warning", 5),
+            "good": ("8+ Cups / Whole Foods", "Optimal Nutrition", "badge-success", 8)
+        }
+        d_val, d_status, d_badge, d_pts = diet_map.get(diet_ans, ("8+ Cups / Whole Foods", "Optimal Nutrition", "badge-success", 8))
+        lifestyle_score += d_pts
+        if d_badge in ["badge-danger", "badge-warning"]:
+            lifestyle_watchpoints.append("Hydration & Nutrition")
+        survey_items.append({
+            "icon": "🥗",
+            "label": "Hydration & Diet",
+            "value": d_val,
+            "status": d_status,
+            "badge": d_badge
+        })
+
+        # Q5: Current Discomfort / Symptoms
+        sym_map = {
+            "none": ("No Discomfort", "Symptom-Free", "badge-success", 8),
+            "fatigue": ("Frequent Fatigue / Low Energy", "Monitor Energy", "badge-warning", 4),
+            "headache_dizziness": ("Headaches / Dizziness", "Clinical Watch", "badge-danger", 2),
+            "shortness_breath": ("Breathlessness on Exertion", "Clinical Watch", "badge-danger", 2),
+            "aches_pains": ("Muscle / Joint Aches", "Physical Strain", "badge-warning", 4)
+        }
+        sy_val, sy_status, sy_badge, sy_pts = sym_map.get(symptom_ans, ("No Discomfort", "Symptom-Free", "badge-success", 8))
+        lifestyle_score += sy_pts
+        if symptom_ans != "none":
+            lifestyle_watchpoints.append(f"Reported {sy_val}")
+        survey_items.append({
+            "icon": "🩺",
+            "label": "Reported Symptoms",
+            "value": sy_val,
+            "status": sy_status,
+            "badge": sy_badge
+        })
+
+    wellbeing_score = (vitals_score + lifestyle_score) if has_survey else int((vitals_score / 60) * 100)
+
+    # Overall Summary & Tier (Personalized if survey taken)
+    all_watchpoints = findings + lifestyle_watchpoints
+    if not findings and not lifestyle_watchpoints:
         overall_tier = "Optimal Wellbeing"
         tier_badge = "badge-success"
-        overall_summary = "All vital signs and physical health metrics are within expected healthy reference ranges. The patient is exhibiting optimal physiological indicators."
-    elif len(findings) <= 2 and "danger" not in [temp_badge, bp_badge, hr_badge, spo2_badge]:
+        if has_survey:
+            overall_summary = (
+                f"Personalized Well-Being Score: {wellbeing_score}/100. Both clinical vital signs and reported "
+                "daily lifestyle habits (sleep, stress, hydration, and activity) are in healthy alignment."
+            )
+        else:
+            overall_summary = "All vital signs and physical health metrics are within expected healthy reference ranges. Take the 5-question survey to unlock personalized lifestyle guidance."
+    elif "danger" not in [temp_badge, bp_badge, hr_badge, spo2_badge] and len(findings) <= 2 and symptom_ans not in ["headache_dizziness", "shortness_breath"]:
         overall_tier = "General Wellness with Minor Watchpoints"
         tier_badge = "badge-warning"
-        overall_summary = f"Most baseline metrics are stable, with {len(findings)} area(s) ({', '.join(findings)}) flagged for routine lifestyle attention and observation."
+        if has_survey:
+            overall_summary = (
+                f"Personalized Well-Being Score: {wellbeing_score}/100. Baseline vitals and survey responses highlight "
+                f"focus areas in {', '.join(all_watchpoints[:4])}. Follow the tailored action plan below."
+            )
+        else:
+            overall_summary = f"Most baseline metrics are stable, with {len(findings)} area(s) ({', '.join(findings)}) flagged for routine lifestyle attention and observation."
     else:
         overall_tier = "Clinical Attention Recommended"
         tier_badge = "badge-danger"
-        overall_summary = f"Screening results indicate {len(findings)} metric(s) ({', '.join(findings)}) outside optimal ranges. Healthcare personnel review is recommended."
+        if has_survey:
+            overall_summary = (
+                f"Personalized Well-Being Score: {wellbeing_score}/100. Screening vitals and questionnaire responses "
+                f"flag {', '.join(all_watchpoints[:4])} for priority healthcare personnel review and lifestyle adjustment."
+            )
+        else:
+            overall_summary = f"Screening results indicate {len(findings)} metric(s) ({', '.join(findings)}) outside optimal ranges. Healthcare personnel review is recommended."
 
-    guidance_pillars = [
-        {
-            "icon": "💧",
-            "title": "Hydration Balance",
-            "content": "Aim for 8 to 10 glasses (approx. 2 liters) of clean water daily. Hydration stabilizes cellular function, supports healthy blood viscosity, and maintains normal body temperature."
-        },
-        {
-            "icon": "🥗",
-            "title": "Wholesome Nutrition",
-            "content": "Prioritize fiber-rich vegetables, fresh fruits, whole grains, and lean proteins. Limit high-sodium processed foods and refined sugars to promote cardiovascular and metabolic health."
-        },
-        {
-            "icon": "🏃",
-            "title": "Active Movement",
-            "content": "Engage in 150 minutes of moderate aerobic activity weekly (such as brisk walking, light cycling, or swimming) paired with daily mobility stretching."
-        },
-        {
-            "icon": "😴",
-            "title": "Restorative Sleep",
-            "content": "Ensure 7 to 9 hours of uninterrupted sleep each night. Consistent sleep schedules optimize immune response, regulate cortisol levels, and support cardiovascular stability."
-        }
-    ]
+    # Dynamic Personalized Guidance Pillars
+    if has_survey:
+        guidance_pillars = []
+
+        # Pillar 1: Hydration & Nutrition (Tailored to Q4 + BP/BMI)
+        if diet_ans == "poor":
+            guidance_pillars.append({
+                "icon": "💧",
+                "title": "Priority Hydration & Low-Sodium Nutrition",
+                "tag": "High Priority Focus",
+                "tag_badge": "badge-danger",
+                "personal_note": f"Tailored to your survey (<4 cups water/day & processed meals) and {bp_str} mmHg BP",
+                "content": "Gradually step up your water intake by drinking 1 full glass upon waking and before every meal (targeting 8 glasses/day). Swap canned or salty snacks for potassium-rich local produce (bananas, leafy greens) to support blood pressure and kidney health."
+            })
+        elif diet_ans == "fair":
+            guidance_pillars.append({
+                "icon": "🥗",
+                "title": "Stepping Up Daily Hydration & Whole Foods",
+                "tag": "Recommended Adjustment",
+                "tag_badge": "badge-warning",
+                "personal_note": f"Tailored to your moderate intake (4–6 cups/day) and BMI of {bmi:.1f} kg/m²",
+                "content": "You are halfway to optimal hydration—carry a reusable water bottle to add 2–3 more glasses daily. Fill half your plate with fiber-rich vegetables and lean proteins to sustain steady energy levels."
+            })
+        else:
+            guidance_pillars.append({
+                "icon": "🥗",
+                "title": "Sustaining Optimal Nutrition & Hydration",
+                "tag": "Healthy Habit",
+                "tag_badge": "badge-success",
+                "personal_note": "Tailored to your strong 8+ glasses water intake and balanced meal routine",
+                "content": "Your consistent hydration and whole-food nutrition provide a strong metabolic foundation. Continue limiting refined sugars and excess sodium to protect long-term vascular health."
+            })
+
+        # Pillar 2: Physical Activity (Tailored to Q2 + BMI/HR)
+        if activity_ans == "sedentary":
+            guidance_pillars.append({
+                "icon": "🏃",
+                "title": "Gentle Active Movement Starter Plan",
+                "tag": "High Priority Focus",
+                "tag_badge": "badge-danger",
+                "personal_note": f"Tailored to your sedentary routine and {bmi:.1f} kg/m² BMI ({bmi_status})",
+                "content": "Avoid intense workouts right away—start with a realistic 15-minute brisk walk after meals 4 days a week, plus 2-minute standing stretch breaks every hour of sitting to boost circulation and metabolism."
+            })
+        elif activity_ans == "light":
+            guidance_pillars.append({
+                "icon": "🏃",
+                "title": "Building Cardiorespiratory Consistency",
+                "tag": "Recommended Adjustment",
+                "tag_badge": "badge-warning",
+                "personal_note": f"Tailored to your 1–2 days/week light activity and {hr} BPM heart rate",
+                "content": "Add 1 to 2 extra days of 30-minute moderate aerobic activity (brisk walking, cycling, or dancing) to reach the recommended 150 weekly minutes for heart and metabolic conditioning."
+            })
+        else:
+            guidance_pillars.append({
+                "icon": "🏃",
+                "title": "Active Fitness & Recovery Balance",
+                "tag": "Healthy Habit",
+                "tag_badge": "badge-success",
+                "personal_note": "Tailored to your active weekly exercise schedule (3+ days/week)",
+                "content": "Your regular physical activity strongly supports cardiovascular endurance and weight stability. Pair your workouts with proper warm-ups, mobility stretching, and post-exercise electrolyte hydration."
+            })
+
+        # Pillar 3: Sleep & Energy Recovery (Tailored to Q1 + Q5 Fatigue/HR)
+        if sleep_ans in ["under_5", "5_to_6"]:
+            guidance_pillars.append({
+                "icon": "😴",
+                "title": "Sleep Debt Recovery & Circadian Reset",
+                "tag": "High Priority Focus" if sleep_ans == "under_5" else "Recommended Adjustment",
+                "tag_badge": "badge-danger" if sleep_ans == "under_5" else "badge-warning",
+                "personal_note": f"Tailored to your reported {'<5' if sleep_ans == 'under_5' else '5–6'} hours of nightly sleep",
+                "content": "Short sleep elevates cortisol, blood pressure, and daytime fatigue. Set a fixed wind-down alarm 45 minutes before bed, dim phone screens, and avoid caffeine after 2:00 PM to extend restful sleep toward 7–8 hours."
+            })
+        else:
+            guidance_pillars.append({
+                "icon": "😴",
+                "title": "Restorative Sleep Maintenance",
+                "tag": "Healthy Habit",
+                "tag_badge": "badge-success",
+                "personal_note": "Tailored to your restorative nightly sleep schedule",
+                "content": "Your sleep duration supports cellular repair, immune resilience, and hormonal balance. Keep your waking and sleeping times consistent even on weekends."
+            })
+
+        # Pillar 4: Stress & Symptom Management (Tailored to Q3 + Q5 + BP)
+        if stress_ans == "high" or symptom_ans != "none":
+            sym_label = {
+                "none": "elevated daily stress",
+                "fatigue": "frequent fatigue",
+                "headache_dizziness": "headaches/dizziness",
+                "shortness_breath": "breathlessness on exertion",
+                "aches_pains": "muscle/joint aches"
+            }.get(symptom_ans, "reported symptoms")
+            guidance_pillars.append({
+                "icon": "🧘",
+                "title": "Stress Regulation & Symptom Care",
+                "tag": "High Priority Focus" if (stress_ans == "high" or symptom_ans in ["headache_dizziness", "shortness_breath"]) else "Recommended Adjustment",
+                "tag_badge": "badge-danger" if (stress_ans == "high" or symptom_ans in ["headache_dizziness", "shortness_breath"]) else "badge-warning",
+                "personal_note": f"Tailored to your {stress_ans} stress level and {sym_label}",
+                "content": "Practice 5 minutes of box breathing (inhale 4s, hold 4s, exhale 4s) twice daily to calm nervous system tension. Pace your physical workload, track when discomfort occurs, and share these notes with clinic staff."
+            })
+        else:
+            guidance_pillars.append({
+                "icon": "🧘",
+                "title": "Mental & Emotional Equilibrium",
+                "tag": "Healthy Habit",
+                "tag_badge": "badge-success",
+                "personal_note": "Tailored to your low stress level and symptom-free status",
+                "content": "You reported manageable daily stress and no physical discomfort. Continue setting healthy work-life boundaries, spending time outdoors, and staying connected with community support."
+            })
+    else:
+        guidance_pillars = [
+            {
+                "icon": "💧",
+                "title": "Hydration Balance",
+                "tag": "General Guidance",
+                "tag_badge": "badge-info",
+                "personal_note": "Complete the 5-question survey to personalize this pillar",
+                "content": "Aim for 8 to 10 glasses (approx. 2 liters) of clean water daily. Hydration stabilizes cellular function, supports healthy blood viscosity, and maintains normal body temperature."
+            },
+            {
+                "icon": "🥗",
+                "title": "Wholesome Nutrition",
+                "tag": "General Guidance",
+                "tag_badge": "badge-info",
+                "personal_note": "Complete the 5-question survey to personalize this pillar",
+                "content": "Prioritize fiber-rich vegetables, fresh fruits, whole grains, and lean proteins. Limit high-sodium processed foods and refined sugars to promote cardiovascular and metabolic health."
+            },
+            {
+                "icon": "🏃",
+                "title": "Active Movement",
+                "tag": "General Guidance",
+                "tag_badge": "badge-info",
+                "personal_note": "Complete the 5-question survey to personalize this pillar",
+                "content": "Engage in 150 minutes of moderate aerobic activity weekly (such as brisk walking, light cycling, or swimming) paired with daily mobility stretching."
+            },
+            {
+                "icon": "😴",
+                "title": "Restorative Sleep",
+                "tag": "General Guidance",
+                "tag_badge": "badge-info",
+                "personal_note": "Complete the 5-question survey to personalize this pillar",
+                "content": "Ensure 7 to 9 hours of uninterrupted sleep each night. Consistent sleep schedules optimize immune response, regulate cortisol levels, and support cardiovascular stability."
+            }
+        ]
 
     return {
+        "has_survey": has_survey,
+        "survey": survey or {},
+        "survey_items": survey_items,
+        "wellbeing_score": wellbeing_score,
         "overall_tier": overall_tier,
         "tier_badge": tier_badge,
         "overall_summary": overall_summary,
@@ -1860,8 +2235,8 @@ def download_patient_history(patient_id):
     )
 
 
-@app.route("/patients/<int:patient_id>/wellbeing-assessment")
-@app.route("/patients/<int:patient_id>/wellbeing-assessment/<int:record_id>")
+@app.route("/patients/<int:patient_id>/wellbeing-assessment", methods=["GET", "POST"])
+@app.route("/patients/<int:patient_id>/wellbeing-assessment/<int:record_id>", methods=["GET", "POST"])
 @login_required
 def wellbeing_assessment_page(patient_id, record_id=None):
     patient = get_patient_by_id(patient_id)
@@ -1884,9 +2259,27 @@ def wellbeing_assessment_page(patient_id, record_id=None):
     if not selected_record:
         selected_record = patient_records[-1]
 
+    if request.method == "POST":
+        survey_data = {
+            "sleep": request.form.get("sleep", "7_to_8"),
+            "activity": request.form.get("activity", "moderate"),
+            "stress": request.form.get("stress", "low"),
+            "hydration_diet": request.form.get("hydration_diet", "good"),
+            "symptoms": request.form.get("symptoms", "none")
+        }
+        save_wellbeing_survey(patient_id, selected_record.get("id"), survey_data)
+        add_access_log(
+            user=get_current_admin_name(),
+            role=get_current_admin_role(),
+            action=f'Completed 5-question Well-Being Survey for {patient.get("first_name")} {patient.get("last_name")}'
+        )
+        flash("Well-Being Survey saved! Assessment guidance has been personalized for this patient.", "success")
+        return redirect(url_for("wellbeing_assessment_page", patient_id=patient_id, record_id=selected_record.get("id")))
+
     patient["age"] = calculate_age(patient.get("birth_date", ""))
 
-    assessment = get_wellbeing_assessment(selected_record, patient)
+    survey = get_wellbeing_survey(patient_id, selected_record.get("id"), selected_record)
+    assessment = get_wellbeing_assessment(selected_record, patient, survey=survey)
 
     add_access_log(
         user=get_current_admin_name(),

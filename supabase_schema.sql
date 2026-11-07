@@ -43,8 +43,11 @@ CREATE TABLE IF NOT EXISTS records (
     bmi_category TEXT,
     status TEXT,
     remarks TEXT,
+    survey_data JSONB DEFAULT '{}'::jsonb,
     created_at TEXT
 );
+
+ALTER TABLE records ADD COLUMN IF NOT EXISTS survey_data JSONB DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_records_patient_id ON records(patient_id);
 CREATE INDEX IF NOT EXISTS idx_records_status ON records(status);
