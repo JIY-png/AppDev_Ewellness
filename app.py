@@ -2024,13 +2024,13 @@ def add_patient_page():
         contact_no = request.form.get("contact_no", "").strip()
         barangay = request.form.get("barangay", "").strip()
 
-        # Check if patient with same first and last name already exists
+        # Check if patient with same first and last name already exists (case-sensitive)
         existing_patients = get_patients()
         matched_patient = None
         for ep in existing_patients:
             if (
-                ep.get("first_name", "").strip().lower() == first_name.lower()
-                and ep.get("last_name", "").strip().lower() == last_name.lower()
+                ep.get("first_name", "").strip() == first_name
+                and ep.get("last_name", "").strip() == last_name
             ):
                 matched_patient = ep
                 break
