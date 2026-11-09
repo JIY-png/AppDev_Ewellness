@@ -2958,7 +2958,20 @@ def api_analytics_data():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy", "service": "ewellness"}), 200
+    db_status = "disconnected"
+    if supabase:
+        try:
+            # Lightweight query to keep Supabase active and verify connectivity
+            supabase.table("patients").select("id").limit(1).execute()
+            db_status = "connected"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+
+    return jsonify({
+        "status": "healthy",
+        "service": "ewellness",
+        "database": db_status
+    }), 200
 
 
 @app.route("/api/records")
