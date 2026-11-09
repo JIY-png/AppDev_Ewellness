@@ -302,13 +302,54 @@ def calculate_bmi(height_cm, weight_kg):
 
 
 def calculate_age(birth_date):
-    try:
-        birth = datetime.strptime(birth_date, "%Y-%m-%d")
-        today = datetime.now()
-        age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
-        return age
-    except:
+    if not birth_date:
         return 0
+    if isinstance(birth_date, int):
+        if 0 < birth_date < 130:
+            return birth_date
+        if 1900 <= birth_date <= datetime.now().year:
+            return datetime.now().year - birth_date
+
+    birth_str = str(birth_date).strip()
+    if not birth_str:
+        return 0
+
+    if birth_str.isdigit() and len(birth_str) <= 3:
+        val = int(birth_str)
+        if 0 < val < 130:
+            return val
+
+    if birth_str.isdigit() and len(birth_str) == 4:
+        val = int(birth_str)
+        if 1900 <= val <= datetime.now().year:
+            return datetime.now().year - val
+
+    date_formats = [
+        "%Y-%m-%d",
+        "%Y%m%d",
+        "%Y/%m/%d",
+        "%m/%d/%Y",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%m-%d-%Y",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+    ]
+
+    if "T" in birth_str:
+        birth_str = birth_str.split("T")[0]
+
+    today = datetime.now()
+    for fmt in date_formats:
+        try:
+            birth = datetime.strptime(birth_str, fmt)
+            age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+            if age >= 0:
+                return age
+        except (ValueError, TypeError):
+            continue
+
+    return 0
 
 
 def get_bmi_category(bmi):
@@ -1915,7 +1956,16 @@ def patients_page():
 
     # Add age to each patient
     for patient in patients_list:
-        patient["age"] = calculate_age(patient.get("birth_date", ""))
+        calc_age = calculate_age(patient.get("birth_date", ""))
+        if calc_age > 0:
+            patient["age"] = calc_age
+        elif patient.get("age"):
+            try:
+                patient["age"] = int(patient["age"])
+            except:
+                patient["age"] = 0
+        else:
+            patient["age"] = 0
 
     if search:
         filtered_patients = [
@@ -2289,7 +2339,16 @@ def wellbeing_assessment_page(patient_id, record_id=None):
         flash("Well-Being Survey saved! Assessment guidance has been personalized for this patient.", "success")
         return redirect(url_for("wellbeing_assessment_page", patient_id=patient_id, record_id=selected_record.get("id")))
 
-    patient["age"] = calculate_age(patient.get("birth_date", ""))
+    calc_age = calculate_age(patient.get("birth_date", ""))
+    if calc_age > 0:
+        patient["age"] = calc_age
+    elif patient.get("age"):
+        try:
+            patient["age"] = int(patient["age"])
+        except:
+            patient["age"] = 0
+    else:
+        patient["age"] = 0
 
     survey = get_wellbeing_survey(patient_id, selected_record.get("id"), selected_record)
     assessment = get_wellbeing_assessment(selected_record, patient, survey=survey)
