@@ -58,7 +58,27 @@ def get_patients():
         return []
     try:
         response = supabase.table('patients').select('*').order('id', desc=False).execute()
-        return response.data or []
+        patients = response.data or []
+        if patients:
+            # Attach age to all patients from their health records (column E)
+            try:
+                records_res = supabase.table('records').select('patient_id, E').order('id', desc=False).execute()
+                age_map = {}
+                for r in (records_res.data or []):
+                    pid = r.get('patient_id')
+                    age = r.get('E')
+                    if pid and age is not None:
+                        try:
+                            age_map[pid] = int(age)
+                        except:
+                            age_map[pid] = age
+                for p in patients:
+                    p['age'] = age_map.get(p['id'], 0)
+            except Exception as re:
+                print(f"Error fetching record ages for patients: {re}")
+                for p in patients:
+                    p.setdefault('age', 0)
+        return patients
     except Exception as e:
         print(f"Error getting patients: {e}")
         return []
@@ -69,7 +89,20 @@ def get_patient_by_id(patient_id):
     try:
         response = supabase.table('patients').select('*').eq('id', patient_id).execute()
         if response.data:
-            return response.data[0]
+            patient = response.data[0]
+            # Resolve age from latest record (column E)
+            try:
+                records = supabase.table('records').select('E').eq('patient_id', patient_id).order('id', desc=True).limit(1).execute()
+                if records.data and records.data[0].get('E') is not None:
+                    try:
+                        patient['age'] = int(records.data[0]['E'])
+                    except:
+                        patient['age'] = records.data[0]['E']
+                else:
+                    patient['age'] = 0
+            except Exception:
+                patient['age'] = 0
+            return patient
         return None
     except Exception as e:
         print(f"Error getting patient by id: {e}")
@@ -83,7 +116,6 @@ def add_patient(patient_data):
             "first_name": patient_data.get("first_name", "").strip(),
             "last_name": patient_data.get("last_name", "").strip(),
             "gender": patient_data.get("gender", "Not specified"),
-            "birth_date": patient_data.get("birth_date", "1990-01-01"),
             "contact_no": patient_data.get("contact_no", ""),
             "barangay": patient_data.get("barangay", "")
         }
@@ -102,7 +134,7 @@ def update_patient(patient_id, patient_data):
     if supabase is None:
         return False
     try:
-        clean_data = {k: v for k, v in patient_data.items() if k != 'id'}
+        clean_data = {k: v for k, v in patient_data.items() if k not in ('id', 'birth_date')}
         response = supabase.table('patients').update(clean_data).eq('id', patient_id).execute()
         return len(response.data) > 0
     except Exception as e:
@@ -424,7 +456,7 @@ def get_patient_name(patient_id):
     return "Unknown Patient"
 
 
-def create_health_record(patient_id, temperature, heart_rate, oxygen_saturation, systolic, diastolic, height, weight):
+def create_health_record(patient_id, temperature, heart_rate, oxygen_saturation, systolic, diastolic, height, weight, age=None):
     bmi = calculate_bmi(height, weight)
     bmi_category = get_bmi_category(bmi)
 
@@ -462,7 +494,8 @@ def create_health_record(patient_id, temperature, heart_rate, oxygen_saturation,
         remarks = "Vital signs and BMI are within normal range."
 
     patient = get_patient_by_id(patient_id)
-    age = calculate_age(patient["birth_date"]) if patient else 0
+    if age is None or age == 0:
+        age = patient.get("age", 0) if patient else 0
 
     new_record = {
         "id": get_next_record_id(),
@@ -1954,18 +1987,11 @@ def patients_page():
     search = request.args.get("search", "").lower().strip()
     patients_list = get_patients()
 
-    # Add age to each patient
+    # Ensure age is populated for each patient
     for patient in patients_list:
-        calc_age = calculate_age(patient.get("birth_date", ""))
-        if calc_age > 0:
-            patient["age"] = calc_age
-        elif patient.get("age"):
-            try:
-                patient["age"] = int(patient["age"])
-            except:
-                patient["age"] = 0
-        else:
-            patient["age"] = 0
+        if not patient.get("age"):
+            calc_age = calculate_age(patient.get("birth_date", ""))
+            patient["age"] = calc_age if calc_age > 0 else 0
 
     if search:
         filtered_patients = [
@@ -1991,18 +2017,13 @@ def patients_page():
 @login_required
 def add_patient_page():
     if request.method == "POST":
-        # Calculate birth date from age
         age = int(request.form.get("age", 0))
-        current_year = datetime.now().year
-        birth_year = current_year - age
-        birth_date = f"{birth_year}-01-01"  # Default to January 1st
 
         new_patient = {
             "id": get_next_patient_id(),
             "first_name": request.form.get("first_name", "").strip(),
             "last_name": request.form.get("last_name", "").strip(),
             "gender": request.form.get("gender", "").strip(),
-            "birth_date": birth_date,
             "contact_no": request.form.get("contact_no", "").strip(),
             "barangay": request.form.get("barangay", "").strip()
         }
@@ -2042,7 +2063,8 @@ def add_patient_page():
             systolic=systolic,
             diastolic=diastolic,
             height=height,
-            weight=weight
+            weight=weight,
+            age=age
         )
 
         add_access_log(
@@ -2146,7 +2168,7 @@ def download_patient_history(patient_id):
     patient_info = f"""
     <b>Patient Name:</b> {patient_name}<br/>
     <b>Gender:</b> {patient.get("gender", "Not specified")}<br/>
-    <b>Birth Date:</b> {patient.get("birth_date", "N/A")}<br/>
+    <b>Age:</b> {patient.get("age") or "N/A"}<br/>
     <b>Contact Number:</b> {patient.get("contact_no") or "N/A"}<br/>
     <b>Barangay:</b> {patient.get("barangay") or "N/A"}<br/>
     <b>Generated At:</b> {generated_at}
@@ -2339,16 +2361,14 @@ def wellbeing_assessment_page(patient_id, record_id=None):
         flash("Well-Being Survey saved! Assessment guidance has been personalized for this patient.", "success")
         return redirect(url_for("wellbeing_assessment_page", patient_id=patient_id, record_id=selected_record.get("id")))
 
-    calc_age = calculate_age(patient.get("birth_date", ""))
-    if calc_age > 0:
-        patient["age"] = calc_age
-    elif patient.get("age"):
+    if selected_record and selected_record.get("E"):
         try:
-            patient["age"] = int(patient["age"])
+            patient["age"] = int(selected_record["E"])
         except:
-            patient["age"] = 0
-    else:
-        patient["age"] = 0
+            pass
+    if not patient.get("age"):
+        calc_age = calculate_age(patient.get("birth_date", ""))
+        patient["age"] = calc_age if calc_age > 0 else 0
 
     survey = get_wellbeing_survey(patient_id, selected_record.get("id"), selected_record)
     assessment = get_wellbeing_assessment(selected_record, patient, survey=survey)
@@ -2591,7 +2611,6 @@ def import_patients_from_csv(file):
             "first_name": row.get("first_name", "").strip(),
             "last_name": row.get("last_name", "").strip(),
             "gender": row.get("gender", "Not specified").strip(),
-            "birth_date": row.get("birth_date", "").strip(),
             "contact_no": row.get("contact_no", "").strip(),
             "barangay": row.get("barangay", "").strip()
         }
@@ -2615,7 +2634,6 @@ def import_patients_from_json(file):
             "first_name": patient_data.get("first_name", "").strip(),
             "last_name": patient_data.get("last_name", "").strip(),
             "gender": patient_data.get("gender", "Not specified").strip(),
-            "birth_date": patient_data.get("birth_date", "").strip(),
             "contact_no": patient_data.get("contact_no", "").strip(),
             "barangay": patient_data.get("barangay", "").strip()
         }
@@ -2750,20 +2768,16 @@ def import_kiosk_csv(file):
 
         if not existing_patient:
             max_patient_id += 1
-            current_year = datetime.now().year
-            birth_year = current_year - age
-            birth_date = f"{birth_year}-01-01"
-
             new_patient = {
                 "id": max_patient_id,
                 "first_name": first_name,
                 "last_name": last_name,
                 "gender": gender,
-                "birth_date": birth_date,
                 "contact_no": "",
                 "barangay": ""
             }
             add_patient(new_patient)
+            new_patient["age"] = age
             patients_list.append(new_patient)
             patient_id = max_patient_id
         else:
@@ -2785,7 +2799,8 @@ def import_kiosk_csv(file):
             systolic=systolic,
             diastolic=diastolic,
             height=height,
-            weight=weight
+            weight=weight,
+            age=age
         )
         imported_count += 1
 
@@ -2871,21 +2886,16 @@ def import_kiosk_json(file):
         if not existing_patient:
             # Create new patient
             max_patient_id += 1
-            # Calculate birth date from age
-            current_year = datetime.now().year
-            birth_year = current_year - age
-            birth_date = f"{birth_year}-01-01"  # Default to January 1st
-
             new_patient = {
                 "id": max_patient_id,
                 "first_name": first_name,
                 "last_name": last_name,
                 "gender": gender,
-                "birth_date": birth_date,
                 "contact_no": "",
                 "barangay": ""
             }
             add_patient(new_patient)
+            new_patient["age"] = age
             patients_list.append(new_patient)
             patient_id = max_patient_id
         else:
@@ -2910,7 +2920,8 @@ def import_kiosk_json(file):
             systolic=systolic,
             diastolic=diastolic,
             height=height,
-            weight=weight
+            weight=weight,
+            age=age
         )
         imported_count += 1
 
