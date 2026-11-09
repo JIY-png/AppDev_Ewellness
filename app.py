@@ -2067,7 +2067,9 @@ def download_patient_history(patient_id):
 
     patient_records = list(reversed(get_records_for_patient(patient_id)))
 
-    patient_name = f'{patient["first_name"]} {patient["last_name"]}'
+    first_name = patient.get("first_name", "")
+    last_name = patient.get("last_name", "")
+    patient_name = f"{first_name} {last_name}".strip() or f"Patient_{patient_id}"
     generated_at = datetime.now().strftime("%Y-%m-%d %I:%M %p")
 
     buffer = BytesIO()
@@ -2075,10 +2077,10 @@ def download_patient_history(patient_id):
     pdf = SimpleDocTemplate(
         buffer,
         pagesize=letter,
-        rightMargin=0.6 * inch,
-        leftMargin=0.6 * inch,
-        topMargin=0.6 * inch,
-        bottomMargin=0.6 * inch
+        rightMargin=0.5 * inch,
+        leftMargin=0.5 * inch,
+        topMargin=0.5 * inch,
+        bottomMargin=0.5 * inch
     )
 
     styles = getSampleStyleSheet()
@@ -2089,35 +2091,39 @@ def download_patient_history(patient_id):
     normal_style = styles["BodyText"]
 
     story.append(Paragraph("E-Wellness Patient Health History", title_style))
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 10))
 
     patient_info = f"""
     <b>Patient Name:</b> {patient_name}<br/>
-    <b>Gender:</b> {patient["gender"]}<br/>
-    <b>Birth Date:</b> {patient["birth_date"]}<br/>
-    <b>Contact Number:</b> {patient["contact_no"]}<br/>
-    <b>Barangay:</b> {patient["barangay"]}<br/>
+    <b>Gender:</b> {patient.get("gender", "Not specified")}<br/>
+    <b>Birth Date:</b> {patient.get("birth_date", "N/A")}<br/>
+    <b>Contact Number:</b> {patient.get("contact_no") or "N/A"}<br/>
+    <b>Barangay:</b> {patient.get("barangay") or "N/A"}<br/>
     <b>Generated At:</b> {generated_at}
     """
 
     story.append(Paragraph(patient_info, normal_style))
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, 14))
 
     total_records = len(patient_records)
     latest_record = patient_records[0] if patient_records else None
 
     if latest_record:
-        # Display status - if normal or needs attention with normal BMI, show "Normal"
-        if latest_record["status"] == "Normal" or (latest_record["status"] == "Needs Attention" and latest_record["bmi_category"] == "Normal"):
+        latest_bmi = latest_record.get("M") or latest_record.get("bmi") or "—"
+        latest_bmi_cat = latest_record.get("bmi_category") or "—"
+        latest_status = latest_record.get("status") or "Normal"
+        latest_date = latest_record.get("created_at") or f"{latest_record.get('A', '')} {latest_record.get('B', '')}".strip() or "—"
+
+        if latest_status == "Normal" or (latest_status == "Needs Attention" and latest_bmi_cat == "Normal"):
             display_status = "Normal"
         else:
-            display_status = latest_record["status"]
+            display_status = latest_status
 
         summary_info = f"""
         <b>Total Records:</b> {total_records}<br/>
-        <b>Latest BMI:</b> {latest_record["bmi"]} ({latest_record["bmi_category"]})<br/>
+        <b>Latest BMI:</b> {latest_bmi} ({latest_bmi_cat})<br/>
         <b>Latest Status:</b> {display_status}<br/>
-        <b>Latest Record Date:</b> {latest_record["created_at"]}
+        <b>Latest Record Date:</b> {latest_date}
         """
     else:
         summary_info = """
@@ -2128,11 +2134,12 @@ def download_patient_history(patient_id):
         """
 
     story.append(Paragraph("Patient Summary", heading_style))
+    story.append(Spacer(1, 6))
     story.append(Paragraph(summary_info, normal_style))
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, 14))
 
     story.append(Paragraph("Health Record History", heading_style))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
     if patient_records:
         table_data = [
@@ -2146,42 +2153,50 @@ def download_patient_history(patient_id):
         ]
 
         for record in patient_records:
+            temp = record.get("J") or record.get("temperature") or record.get("body_temp") or "—"
+            hr = record.get("H") or record.get("heart_rate") or "—"
+            spo2 = record.get("I") or record.get("oxygen_saturation") or "—"
+            bp = record.get("G") or record.get("blood_pressure") or "—"
+            height = record.get("L") or record.get("height") or "—"
+            weight = record.get("K") or record.get("weight") or "—"
+            bmi_val = record.get("M") or record.get("bmi") or "—"
+            bmi_cat = record.get("bmi_category") or "—"
+            rec_status = record.get("status") or "Normal"
+            remarks = record.get("remarks") or "None"
+            rec_date = record.get("created_at") or f"{record.get('A', '')} {record.get('B', '')}".strip() or "—"
+
             vitals = (
-                f'Temp: {record["temperature"]} deg C<br/>'
-                f'HR: {record["heart_rate"]} bpm<br/>'
-                f'SpO2: {record["oxygen_saturation"]}%<br/>'
-                f'BP: {record["blood_pressure"]}<br/>'
-                f'Height: {record["height"]} cm<br/>'
-                f'Weight: {record["weight"]} kg'
+                f"Temp: {temp} °C<br/>"
+                f"HR: {hr} bpm<br/>"
+                f"SpO2: {spo2}%<br/>"
+                f"BP: {bp}<br/>"
+                f"Height: {height} cm<br/>"
+                f"Weight: {weight} kg"
             )
 
-            bmi = (
-                f'{record["bmi"]}<br/>'
-                f'{record["bmi_category"]}'
-            )
+            bmi_display = f"{bmi_val}<br/>{bmi_cat}"
 
-            # Display status - if normal or needs attention with normal BMI, show "Normal"
-            if record["status"] == "Normal" or (record["status"] == "Needs Attention" and record["bmi_category"] == "Normal"):
-                display_status = "Normal"
+            if rec_status == "Normal" or (rec_status == "Needs Attention" and bmi_cat == "Normal"):
+                display_rec_status = "Normal"
             else:
-                display_status = record["status"]
+                display_rec_status = rec_status
 
             table_data.append([
-                Paragraph(str(record["created_at"]), normal_style),
+                Paragraph(str(rec_date), normal_style),
                 Paragraph(vitals, normal_style),
-                Paragraph(bmi, normal_style),
-                Paragraph(display_status, normal_style),
-                Paragraph(str(record["remarks"]), normal_style)
+                Paragraph(bmi_display, normal_style),
+                Paragraph(display_rec_status, normal_style),
+                Paragraph(str(remarks), normal_style)
             ])
 
         table = Table(
             table_data,
             colWidths=[
-                1.25 * inch,
-                1.55 * inch,
-                0.85 * inch,
-                1.05 * inch,
-                1.55 * inch
+                1.3 * inch,
+                1.6 * inch,
+                0.9 * inch,
+                1.1 * inch,
+                2.3 * inch
             ],
             repeatRows=1
         )
@@ -2194,8 +2209,8 @@ def download_patient_history(patient_id):
             ("FONTSIZE", (0, 1), (-1, -1), 7.5),
             ("TOPPADDING", (0, 0), (-1, -1), 6),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#dce8f7")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#ffffff"))
@@ -2222,8 +2237,6 @@ def download_patient_history(patient_id):
         role=get_current_admin_role(),
         action=f"Downloaded health history PDF for {patient_name}"
     )
-
-    flash("Patient history PDF generated successfully.", "success")
 
     filename = f"{make_safe_filename(patient_name)}_health_history.pdf"
 
