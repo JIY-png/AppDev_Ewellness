@@ -4,12 +4,57 @@ document.addEventListener("DOMContentLoaded", function () {
     const clock = document.getElementById("clock");
 
     /* ============================= */
-    /* MOBILE SIDEBAR */
+    /* RESPONSIVE MOBILE SIDEBAR */
     /* ============================= */
 
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+    const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
+
+    function openSidebar() {
+        if (sidebar) sidebar.classList.add("show");
+        if (sidebarBackdrop) sidebarBackdrop.classList.add("show");
+        document.body.classList.add("sidebar-open");
+    }
+
+    function closeSidebar() {
+        if (sidebar) sidebar.classList.remove("show");
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove("show");
+        document.body.classList.remove("sidebar-open");
+    }
+
     if (mobileMenuBtn && sidebar) {
-        mobileMenuBtn.addEventListener("click", function () {
-            sidebar.classList.toggle("show");
+        mobileMenuBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            if (sidebar.classList.contains("show")) {
+                closeSidebar();
+            } else {
+                openSidebar();
+            }
+        });
+    }
+
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener("click", closeSidebar);
+    }
+
+    if (sidebarCloseBtn) {
+        sidebarCloseBtn.addEventListener("click", closeSidebar);
+    }
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && sidebar && sidebar.classList.contains("show")) {
+            closeSidebar();
+        }
+    });
+
+    if (sidebar) {
+        const navLinks = sidebar.querySelectorAll(".nav-link, .logout-link");
+        navLinks.forEach(function (link) {
+            link.addEventListener("click", function () {
+                if (window.innerWidth <= 992) {
+                    closeSidebar();
+                }
+            });
         });
     }
 

@@ -32,9 +32,14 @@
 
     {% else %}
 
-        <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation menu">
+            <span>☰</span>
+        </button>
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
         <aside class="sidebar" id="sidebar">
+            <button type="button" class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close navigation menu">✕</button>
+
             <div class="brand">
                 <div class="brand-icon">
                     <img src="{{ url_for('static', filename='E-Wellness logo.png') }}" alt="E-Wellness Logo">
