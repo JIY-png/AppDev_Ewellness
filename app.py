@@ -20,16 +20,16 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from supabase import create_client, Client
 
 
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = "ewellness_frontend_demo_secret"
+app.secret_key = os.getenv("SECRET_KEY", "ewellness_frontend_demo_secret")
 
 
 # --------------------------------------------------
 # SUPABASE CONFIGURATION
 # --------------------------------------------------
-
-# Load environment variables
-load_dotenv()
 
 # Initialize Supabase
 supabase_url = os.getenv("SUPABASE_URL")
@@ -2871,6 +2871,11 @@ def api_analytics_data():
         "analytics": comprehensive_vitals_analytics(records_list),
         "records": all_vitals_chart_records(records_list)
     })
+
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy", "service": "ewellness"}), 200
 
 
 @app.route("/api/records")

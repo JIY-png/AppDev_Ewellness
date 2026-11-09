@@ -1,0 +1,25 @@
+name: Render Keep Alive
+
+on:
+  schedule:
+    # Runs every 10 minutes to prevent Render from idling (Render idle threshold is 15 mins)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+
+jobs:
+  ping:
+    name: Ping Service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render App Health Endpoint
+        run: |
+          echo "Pinging E-Wellness service on Render..."
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" https://ewellness.onrender.com/health)
+          echo "Response code: $RESPONSE"
+          if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 400 ]; then
+            echo "Service is awake and healthy!"
+          else
+            echo "Warning: Received unexpected status code $RESPONSE, retrying with root URL..."
+            curl -s -o /dev/null -w "%{http_code}" https://ewellness.onrender.com/
+          fi
+
