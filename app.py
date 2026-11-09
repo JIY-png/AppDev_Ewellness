@@ -2018,19 +2018,45 @@ def patients_page():
 def add_patient_page():
     if request.method == "POST":
         age = int(request.form.get("age", 0))
+        first_name = request.form.get("first_name", "").strip()
+        last_name = request.form.get("last_name", "").strip()
+        gender = request.form.get("gender", "").strip()
+        contact_no = request.form.get("contact_no", "").strip()
+        barangay = request.form.get("barangay", "").strip()
 
-        new_patient = {
-            "id": get_next_patient_id(),
-            "first_name": request.form.get("first_name", "").strip(),
-            "last_name": request.form.get("last_name", "").strip(),
-            "gender": request.form.get("gender", "").strip(),
-            "contact_no": request.form.get("contact_no", "").strip(),
-            "barangay": request.form.get("barangay", "").strip()
-        }
+        # Check if patient with same first and last name already exists
+        existing_patients = get_patients()
+        matched_patient = None
+        for ep in existing_patients:
+            if (
+                ep.get("first_name", "").strip().lower() == first_name.lower()
+                and ep.get("last_name", "").strip().lower() == last_name.lower()
+            ):
+                matched_patient = ep
+                break
 
-        created_patient_id = add_patient(new_patient)
-        if created_patient_id:
-            new_patient["id"] = created_patient_id
+        if matched_patient:
+            new_patient = matched_patient
+            # Update contact / barangay if provided and previously missing
+            update_data = {}
+            if contact_no and not matched_patient.get("contact_no"):
+                update_data["contact_no"] = contact_no
+            if barangay and not matched_patient.get("barangay"):
+                update_data["barangay"] = barangay
+            if update_data:
+                update_patient(matched_patient["id"], update_data)
+        else:
+            new_patient = {
+                "id": get_next_patient_id(),
+                "first_name": first_name,
+                "last_name": last_name,
+                "gender": gender,
+                "contact_no": contact_no,
+                "barangay": barangay
+            }
+            created_patient_id = add_patient(new_patient)
+            if created_patient_id:
+                new_patient["id"] = created_patient_id
 
         # Parse blood pressure (format: "120/80")
         blood_pressure = request.form.get("blood_pressure", "").strip()

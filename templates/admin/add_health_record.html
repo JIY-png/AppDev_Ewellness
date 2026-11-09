@@ -73,10 +73,22 @@
         </div>
 
         <div class="add-record-actions full">
-            <button type="submit" class="primary-btn">
+            <button type="submit" class="primary-btn" id="submitRecordBtn">
                 Save Health Record
             </button>
         </div>
     </form>
+
+    <script>
+    document.querySelector(".add-record-clean-form")?.addEventListener("submit", function(e) {
+        const btn = document.getElementById("submitRecordBtn");
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = "0.7";
+            btn.style.cursor = "not-allowed";
+            btn.innerHTML = "Saving Health Record... ⏳";
+        }
+    });
+    </script>
 </section>
 {% endblock %}
