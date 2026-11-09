@@ -189,11 +189,16 @@
                     <p>Recorded patient monitoring assessment</p>
                 </div>
 
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <a
                         href="{{ url_for('wellbeing_assessment_page', patient_id=patient.id, record_id=record.id) }}"
                         style="font-size: 12px; font-weight: 600; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 5px 12px; border-radius: 999px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
                         🌿 View Assessment
+                    </a>
+                    <a
+                        href="{{ url_for('edit_health_record_page', record_id=record.id) }}"
+                        style="font-size: 12px; font-weight: 600; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 5px 12px; border-radius: 999px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                        ✏️ Edit Record
                     </a>
                     <span class="phr-status {% if record.status == 'Normal' %}phr-normal{% else %}phr-attention{% endif %}">
                         {{ record.status }}

@@ -207,6 +207,29 @@ def add_record(record_data):
         print(f"Error adding record: {e}")
         return None
 
+def get_record_by_id(record_id):
+    if supabase is None:
+        return None
+    try:
+        response = supabase.table('records').select('*').eq('id', record_id).execute()
+        if response.data:
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"Error getting record by id: {e}")
+        return None
+
+def update_record(record_id, record_data):
+    if supabase is None:
+        return False
+    try:
+        clean_data = {k: v for k, v in record_data.items() if k != 'id'}
+        response = supabase.table('records').update(clean_data).eq('id', record_id).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        print(f"Error updating record: {e}")
+        return False
+
 def get_admin_users():
     if supabase is None:
         return []
@@ -2467,6 +2490,106 @@ def add_health_record_page():
         title="Add Health Record",
         active_page="ehr_records",
         selected_patient=selected_patient
+    )
+
+
+@app.route("/edit-health-record/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_health_record_page(record_id):
+    record = get_record_by_id(record_id)
+    if not record:
+        flash("Health record not found.", "error")
+        return redirect(url_for("ehr_records_page"))
+
+    patient_id = record.get("patient_id")
+    patient = get_patient_by_id(patient_id)
+    if not patient:
+        flash("Associated patient not found.", "error")
+        return redirect(url_for("ehr_records_page"))
+
+    if request.method == "POST":
+        temperature = float(request.form.get("temperature", record.get("J", 36.5)))
+        heart_rate = int(request.form.get("heart_rate", record.get("H", 75)))
+        oxygen_saturation = int(request.form.get("oxygen_saturation", record.get("I", 98)))
+        systolic = int(request.form.get("systolic", 120))
+        diastolic = int(request.form.get("diastolic", 80))
+        height = float(request.form.get("height", record.get("L", 160)))
+        weight = float(request.form.get("weight", record.get("K", 55)))
+        edit_reason = request.form.get("edit_reason", "").strip()
+
+        # Recalculate BMI and clinical status
+        bmi = calculate_bmi(height, weight)
+        bmi_category = get_bmi_category(bmi)
+        status = get_detailed_status(temperature, heart_rate, oxygen_saturation, systolic, diastolic, bmi)
+
+        abnormal_reasons = []
+        if temperature > 37.5: abnormal_reasons.append("high body temperature")
+        if heart_rate < 60: abnormal_reasons.append("low heart rate")
+        if heart_rate > 100: abnormal_reasons.append("high heart rate")
+        if oxygen_saturation < 95: abnormal_reasons.append("low oxygen saturation")
+        if systolic >= 140 or diastolic >= 90: abnormal_reasons.append("high blood pressure")
+        if bmi_category == "Underweight": abnormal_reasons.append("underweight BMI")
+        if bmi_category == "Overweight": abnormal_reasons.append("overweight BMI")
+        if bmi_category == "Obese": abnormal_reasons.append("obese BMI")
+
+        if status != "Normal":
+            remarks = "Needs health personnel review due to " + ", ".join(abnormal_reasons) + "."
+        else:
+            remarks = "Vital signs and BMI are within normal range."
+
+        if edit_reason:
+            remarks = f"{remarks} [Amended: {edit_reason}]"
+
+        updated_data = {
+            "G": f"{systolic}/{diastolic}",
+            "H": heart_rate,
+            "I": oxygen_saturation,
+            "J": temperature,
+            "K": weight,
+            "L": height,
+            "M": bmi,
+            "bmi_category": bmi_category,
+            "status": status,
+            "remarks": remarks
+        }
+
+        # If age is updated, record in column E
+        if request.form.get("age"):
+            try:
+                updated_data["E"] = int(request.form.get("age"))
+            except:
+                pass
+
+        update_record(record_id, updated_data)
+
+        patient_name = f"{patient.get('first_name', '')} {patient.get('last_name', '')}".strip()
+        add_access_log(
+            user=get_current_admin_name(),
+            role=get_current_admin_role(),
+            action=f"Edited health record #{record_id} for {patient_name}" + (f" (Reason: {edit_reason})" if edit_reason else "")
+        )
+
+        flash(f"Health record #{record_id} successfully updated and clinical metrics recalculated.", "success")
+        return redirect(url_for("patient_record_history_page", patient_id=patient_id))
+
+    # Pre-parse blood pressure
+    bp_raw = str(record.get("G", "120/80"))
+    try:
+        bp_parts = bp_raw.split("/")
+        systolic = int(bp_parts[0]) if len(bp_parts) > 0 else 120
+        diastolic = int(bp_parts[1]) if len(bp_parts) > 1 else 80
+    except:
+        systolic = 120
+        diastolic = 80
+
+    return render_template(
+        "admin/edit_health_record.html",
+        title="Edit Health Record",
+        active_page="ehr_records",
+        record=record,
+        patient=patient,
+        systolic=systolic,
+        diastolic=diastolic
     )
 
 

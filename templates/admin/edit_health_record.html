@@ -1,0 +1,111 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<section class="panel add-record-clean-card">
+    <div class="add-record-clean-header">
+        <div>
+            <p class="add-record-eyebrow">Clinical Record Correction</p>
+            <h3>{{ patient.first_name }} {{ patient.last_name }}</h3>
+            <p>
+                Amend vital signs or correct encoding errors for Health Record #{{ record.id }}.
+            </p>
+
+            <div class="add-record-patient-meta">
+                <span>{{ patient.gender }}</span>
+                <span>Age: {{ record.E }} yrs</span>
+                <span>Visit Date: {{ record.A }} {{ record.B }}</span>
+                <span>Barangay: {{ patient.barangay or '—' }}</span>
+            </div>
+        </div>
+
+        <a
+            class="add-record-back-btn"
+            href="{{ url_for('patient_record_history_page', patient_id=patient.id) }}">
+            Back to Patient Records
+        </a>
+    </div>
+
+    <form method="POST" class="add-record-clean-form">
+        <div class="add-record-section full">
+            <h4>Vital Sign Readings</h4>
+            <p>Update the vital signs measured during this clinical session.</p>
+        </div>
+
+        <div class="form-group">
+            <label>Temperature °C</label>
+            <input type="number" step="0.1" name="temperature" value="{{ record.J }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Heart Rate bpm</label>
+            <input type="number" name="heart_rate" value="{{ record.H }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Oxygen Saturation %</label>
+            <input type="number" name="oxygen_saturation" value="{{ record.I }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Systolic BP</label>
+            <input type="number" name="systolic" value="{{ systolic }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Diastolic BP</label>
+            <input type="number" name="diastolic" value="{{ diastolic }}" required>
+        </div>
+
+        <div class="add-record-section full">
+            <h4>Body Measurement & Age</h4>
+            <p>Height and weight will be used to automatically recompute BMI and classification.</p>
+        </div>
+
+        <div class="form-group">
+            <label>Height cm</label>
+            <input type="number" step="0.1" name="height" value="{{ record.L }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Weight kg</label>
+            <input type="number" step="0.1" name="weight" value="{{ record.K }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Age at Checkup</label>
+            <input type="number" name="age" value="{{ record.E }}" required>
+        </div>
+
+        <div class="add-record-section full">
+            <h4>Audit / Amendment Note</h4>
+            <p>Briefly note why this historical record is being modified (recorded in security logs).</p>
+        </div>
+
+        <div class="form-group full">
+            <label>Reason for Amendment (Optional)</label>
+            <input
+                type="text"
+                name="edit_reason"
+                placeholder="e.g. Corrected height from 0 to 165 cm, clerical typo in systolic BP">
+        </div>
+
+        <div class="add-record-actions full">
+            <button type="submit" class="primary-btn" id="submitEditRecordBtn">
+                Save Changes & Recalculate Assessment 🌿
+            </button>
+        </div>
+    </form>
+
+    <script>
+    document.querySelector(".add-record-clean-form")?.addEventListener("submit", function(e) {
+        const btn = document.getElementById("submitEditRecordBtn");
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = "0.7";
+            btn.style.cursor = "not-allowed";
+            btn.innerHTML = "Updating Record... ⏳";
+        }
+    });
+    </script>
+</section>
+{% endblock %}
